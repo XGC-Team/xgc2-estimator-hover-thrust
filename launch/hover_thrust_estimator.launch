@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="ns" default="uav1"/>
+    <arg name="gravity" default="9.8066"/>
+    <arg name="initial_hover_thrust" default="0.5"/>
+    <arg name="rho2" default="0.998"/>
+    <arg name="min_hover_thrust" default="0.05"/>
+    <arg name="max_hover_thrust" default="0.95"/>
+    <arg name="min_altitude" default="0.5"/>
+    <arg name="sample_timeout" default="0.2"/>
+    <arg name="publish_rate" default="50.0"/>
+
+    <group ns="$(arg ns)">
+        <node pkg="hover_thrust_estimator"
+              type="hover_thrust_estimator_node"
+              name="hover_thrust_estimator"
+              output="screen">
+            <param name="gravity" value="$(arg gravity)"/>
+            <param name="initial_hover_thrust" value="$(arg initial_hover_thrust)"/>
+            <param name="rho2" value="$(arg rho2)"/>
+            <param name="min_hover_thrust" value="$(arg min_hover_thrust)"/>
+            <param name="max_hover_thrust" value="$(arg max_hover_thrust)"/>
+            <param name="min_altitude" value="$(arg min_altitude)"/>
+            <param name="sample_timeout" value="$(arg sample_timeout)"/>
+            <param name="publish_rate" value="$(arg publish_rate)"/>
+        </node>
+    </group>
+</launch>
