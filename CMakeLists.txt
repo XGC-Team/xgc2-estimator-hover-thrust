@@ -24,12 +24,14 @@ add_library(hover_thrust_estimator_core
   src/hover_thrust_estimator_node.cpp
 )
 add_dependencies(hover_thrust_estimator_core ${catkin_EXPORTED_TARGETS})
+target_compile_features(hover_thrust_estimator_core PUBLIC cxx_std_17)
 target_link_libraries(hover_thrust_estimator_core ${catkin_LIBRARIES})
 
 add_executable(hover_thrust_estimator_node
   src/hover_thrust_estimator_main.cpp
 )
 add_dependencies(hover_thrust_estimator_node ${catkin_EXPORTED_TARGETS})
+target_compile_features(hover_thrust_estimator_node PUBLIC cxx_std_17)
 target_link_libraries(hover_thrust_estimator_node
   hover_thrust_estimator_core
   ${catkin_LIBRARIES}
