@@ -28,10 +28,21 @@ require_command clang-tidy
 require_command catkin_make
 require_command rsync
 
+if git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 mapfile -d '' CXX_FILES < <(
   cd "${REPO_ROOT}"
-  git ls-files -z -- '*.cpp' '*.cc' '*.cxx' '*.h' '*.hpp' '*.hh' '*.hxx'
+  find include src -type f \
+    \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o \
+       -name '*.h' -o -name '*.hpp' -o -name '*.hh' -o -name '*.hxx' \) \
+    -print0 | sort -z
 )
+else
+  mapfile -d '' CXX_FILES < <(
+    cd "${REPO_ROOT}"
+    find . -type f \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.h' -o -name '*.hpp' -o -name '*.hh' -o -name '*.hxx' \) -print0 |
+      sed -z 's#^\./##'
+  )
+fi
 
 if [[ "${#CXX_FILES[@]}" -eq 0 ]]; then
   echo "no C++ files found" >&2
