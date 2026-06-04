@@ -6,6 +6,10 @@ on:
       - noetic
   workflow_dispatch:
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   cpp-quality:
     name: C++ quality
@@ -44,6 +48,9 @@ jobs:
     needs: cpp-quality
     runs-on: ubuntu-latest
     container: ros:noetic-ros-base-focal
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
