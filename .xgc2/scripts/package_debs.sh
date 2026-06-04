@@ -4,7 +4,7 @@ set -euo pipefail
 INSTALL_ROOT=""
 OUTPUT_DIR=""
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
-VERSION="${PACKAGE_VERSION:-1.1.1-1}"
+VERSION="${PACKAGE_VERSION:-1.1.2-1}"
 PACKAGE="ros-noetic-xgc2-estimator-hover-thrust"
 ROS_PACKAGE="hover_thrust_estimator"
 
@@ -58,6 +58,7 @@ mkdir -p "${pkg_root}"
 copy_path "${PREFIX_ROOT}/share/${ROS_PACKAGE}" "${pkg_root}"
 copy_path "${PREFIX_ROOT}/lib/${ROS_PACKAGE}" "${pkg_root}"
 copy_path "${PREFIX_ROOT}/include/${ROS_PACKAGE}" "${pkg_root}"
+copy_path "${PREFIX_ROOT}/lib/libhover_thrust_estimator_math.so" "${pkg_root}"
 copy_path "${PREFIX_ROOT}/lib/libhover_thrust_estimator_core.so" "${pkg_root}"
 
 mkdir -p "${pkg_root}/DEBIAN" "${pkg_root}/usr/share/doc/${PACKAGE}"
@@ -68,7 +69,7 @@ Section: misc
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: XGC2 <apt@example.com>
-Depends: libxgc2-observer-dev (>= 0.3.0-1), ros-noetic-roscpp, ros-noetic-std-msgs, ros-noetic-sensor-msgs, ros-noetic-geometry-msgs, ros-noetic-mavros-msgs
+Depends: libxgc2-observer-dev (>= 0.3.0-1), libxgc2-state-machine-dev, ros-noetic-message-runtime, ros-noetic-roscpp, ros-noetic-std-msgs, ros-noetic-sensor-msgs, ros-noetic-geometry-msgs, ros-noetic-mavros-msgs
 Description: XGC2 hover thrust estimation package for PX4/MAVROS UAV controllers
 EOF
 printf 'xgc2-estimator-hover-thrust package\n' > "${pkg_root}/usr/share/doc/${PACKAGE}/README"

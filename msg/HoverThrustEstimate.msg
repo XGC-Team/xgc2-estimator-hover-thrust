@@ -1,0 +1,36 @@
+uint8 STATE_INITIALIZING=0
+uint8 STATE_ESTIMATING=1
+uint8 STATE_HOLDING_INPUT_STALE=2
+uint8 STATE_WAITING_FOR_IMU=3
+uint8 STATE_WAITING_FOR_THRUST=4
+uint8 STATE_WAITING_FOR_ALTITUDE=5
+uint8 STATE_BELOW_MIN_ALTITUDE=6
+uint8 STATE_INVALID_THRUST=7
+uint8 STATE_ESTIMATOR_REJECTED=8
+uint8 STATE_FAULT=9
+
+uint32 FLAG_IMU_MISSING=1
+uint32 FLAG_THRUST_MISSING=2
+uint32 FLAG_ALTITUDE_MISSING=4
+uint32 FLAG_IMU_STALE=8
+uint32 FLAG_THRUST_STALE=16
+uint32 FLAG_ALTITUDE_STALE=32
+uint32 FLAG_IMU_INVALID=64
+uint32 FLAG_THRUST_INVALID=128
+uint32 FLAG_ALTITUDE_INVALID=256
+uint32 FLAG_BELOW_MIN_ALTITUDE=512
+uint32 FLAG_ESTIMATOR_REJECTED=1024
+uint32 FLAG_STATE_MACHINE_FAULT=2048
+
+std_msgs/Header header
+uint8 state
+uint32 flags
+string state_name
+float64 hover_thrust
+float64 raw_hover_thrust
+float64 initial_hover_thrust
+float64 thrust_to_acceleration
+bool estimator_valid
+bool sample_used
+float64 source_stamp
+float64 last_estimate_stamp

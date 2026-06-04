@@ -8,9 +8,10 @@
     <arg name="max_hover_thrust" default="0.95"/>
     <arg name="min_altitude" default="0.5"/>
     <arg name="sample_timeout" default="0.2"/>
-    <arg name="publish_rate" default="50.0"/>
+    <arg name="publish_rate" default="10.0"/>
     <arg name="filter_enabled" default="false"/>
     <arg name="filter_cutoff_hz" default="2.0"/>
+    <arg name="estimate_state_topic" default="hover_thrust/estimate_state"/>
 
     <group ns="$(arg ns)">
         <node pkg="hover_thrust_estimator"
@@ -27,6 +28,7 @@
             <param name="publish_rate" value="$(arg publish_rate)"/>
             <param name="filter_enabled" value="$(arg filter_enabled)"/>
             <param name="filter_cutoff_hz" value="$(arg filter_cutoff_hz)"/>
+            <param name="estimate_state_topic" value="$(arg estimate_state_topic)"/>
         </node>
     </group>
 </launch>

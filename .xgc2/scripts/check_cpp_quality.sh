@@ -72,10 +72,12 @@ echo "Running clang-tidy..."
 TIDY_SOURCES=(
   "${WORK_DIR}/src/hover_thrust_estimator/src/hover_thrust_estimator_main.cpp"
   "${WORK_DIR}/src/hover_thrust_estimator/src/hover_thrust_estimator_node.cpp"
+  "${WORK_DIR}/src/hover_thrust_estimator/src/hover_thrust_estimator_runtime.cpp"
 )
 
 clang-tidy \
   -p "${WORK_DIR}/build" \
+  -header-filter="^${WORK_DIR}/src/hover_thrust_estimator/(include|src|test)/" \
   -quiet \
   "${TIDY_SOURCES[@]}"
 

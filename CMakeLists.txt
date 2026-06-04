@@ -7,13 +7,25 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   geometry_msgs
   mavros_msgs
+  message_generation
 )
 find_package(xgc2_observer REQUIRED CONFIG)
+find_package(xgc2_state_machine REQUIRED CONFIG)
+
+add_message_files(
+  FILES
+  HoverThrustEstimate.msg
+)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+)
 
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES hover_thrust_estimator_core
-  CATKIN_DEPENDS roscpp std_msgs sensor_msgs geometry_msgs mavros_msgs
+  LIBRARIES hover_thrust_estimator_math hover_thrust_estimator_core
+  CATKIN_DEPENDS roscpp std_msgs sensor_msgs geometry_msgs mavros_msgs message_runtime
 )
 
 include_directories(
@@ -21,14 +33,23 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+add_library(hover_thrust_estimator_math
+  src/hover_thrust_estimator_runtime.cpp
+)
+target_compile_features(hover_thrust_estimator_math PUBLIC cxx_std_17)
+target_link_libraries(hover_thrust_estimator_math
+  xgc2_observer::observer
+  xgc2_state_machine::state_machine
+)
+
 add_library(hover_thrust_estimator_core
   src/hover_thrust_estimator_node.cpp
 )
-add_dependencies(hover_thrust_estimator_core ${catkin_EXPORTED_TARGETS})
+add_dependencies(hover_thrust_estimator_core ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_compile_features(hover_thrust_estimator_core PUBLIC cxx_std_17)
 target_link_libraries(hover_thrust_estimator_core
+  hover_thrust_estimator_math
   ${catkin_LIBRARIES}
-  xgc2_observer::observer
 )
 
 add_executable(hover_thrust_estimator_node
@@ -48,13 +69,15 @@ if(CATKIN_ENABLE_TESTING)
   if(TARGET ${PROJECT_NAME}_core_test)
     target_compile_features(${PROJECT_NAME}_core_test PUBLIC cxx_std_17)
     target_link_libraries(${PROJECT_NAME}_core_test
+      hover_thrust_estimator_math
       xgc2_observer::observer
+      xgc2_state_machine::state_machine
       ${catkin_LIBRARIES}
     )
   endif()
 endif()
 
-install(TARGETS hover_thrust_estimator_core hover_thrust_estimator_node
+install(TARGETS hover_thrust_estimator_math hover_thrust_estimator_core hover_thrust_estimator_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -66,4 +89,8 @@ install(DIRECTORY include/${PROJECT_NAME}/
 
 install(DIRECTORY launch/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+)
+
+install(DIRECTORY msg/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/msg
 )

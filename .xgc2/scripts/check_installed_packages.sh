@@ -9,8 +9,11 @@ set -u
 
 dpkg -s ros-noetic-xgc2-estimator-hover-thrust >/dev/null
 dpkg -s libxgc2-observer-dev >/dev/null
+dpkg -s libxgc2-state-machine-dev >/dev/null
 test -f /usr/include/xgc2_observer/recursive_least_squares.hpp
+test -f /usr/include/state_machine/state_machine.hpp
 test "$(rospack find hover_thrust_estimator)" = "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator"
+test -f "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator/msg/HoverThrustEstimate.msg"
 roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch >/tmp/xgc2-hover-thrust-estimator-files.txt
 
 while IFS= read -r file; do
@@ -22,6 +25,8 @@ while IFS= read -r file; do
     ldd "${file}" >&2 || true
     exit 1
   fi
-done < <(find "/opt/ros/${ROS_DISTRO}/lib/hover_thrust_estimator" "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so" -type f 2>/dev/null | sort -u)
+done < <(find "/opt/ros/${ROS_DISTRO}/lib/hover_thrust_estimator" \
+  "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_math.so" \
+  "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so" -type f 2>/dev/null | sort -u)
 
 echo "Installed package check passed"

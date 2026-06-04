@@ -62,9 +62,11 @@ docker run --rm \
       file \
       git \
       libxgc2-observer-dev \
+      libxgc2-state-machine-dev \
       rsync \
       ros-noetic-geometry-msgs \
       ros-noetic-mavros-msgs \
+      ros-noetic-message-generation \
       ros-noetic-roscpp \
       ros-noetic-roslaunch \
       ros-noetic-rospack \
