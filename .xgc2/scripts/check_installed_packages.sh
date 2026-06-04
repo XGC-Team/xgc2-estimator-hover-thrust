@@ -5,6 +5,8 @@ ROS_DISTRO="${ROS_DISTRO:-noetic}"
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
 
 dpkg -s ros-noetic-xgc2-estimator-hover-thrust >/dev/null
+dpkg -s libxgc2-observer-dev >/dev/null
+test -f /usr/include/xgc2_observer/recursive_least_squares.hpp
 test "$(rospack find hover_thrust_estimator)" = "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator"
 roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch >/tmp/xgc2-hover-thrust-estimator-files.txt
 

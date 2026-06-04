@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   mavros_msgs
 )
+find_package(xgc2_observer REQUIRED CONFIG)
 
 catkin_package(
   INCLUDE_DIRS include
@@ -25,7 +26,10 @@ add_library(hover_thrust_estimator_core
 )
 add_dependencies(hover_thrust_estimator_core ${catkin_EXPORTED_TARGETS})
 target_compile_features(hover_thrust_estimator_core PUBLIC cxx_std_17)
-target_link_libraries(hover_thrust_estimator_core ${catkin_LIBRARIES})
+target_link_libraries(hover_thrust_estimator_core
+  ${catkin_LIBRARIES}
+  xgc2_observer::observer
+)
 
 add_executable(hover_thrust_estimator_node
   src/hover_thrust_estimator_main.cpp

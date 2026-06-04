@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include <xgc2_observer/recursive_least_squares.hpp>
+
 namespace hover_thrust_estimator {
 
 class HoverThrustEstimator {
@@ -28,10 +30,15 @@ public:
         hover_thrust_estimate_ = std::clamp(initial_hover_thrust,
                                             config_.min_hover_thrust,
                                             config_.max_hover_thrust);
-        thr2acc_ = hover_thrust_estimate_ > 1e-6
-                       ? gravity_ / hover_thrust_estimate_
-                       : gravity_ / 0.5;
-        covariance_ = 100.0;
+        const double initial_thr2acc = hover_thrust_estimate_ > 1e-6
+                                           ? gravity_ / hover_thrust_estimate_
+                                           : gravity_ / 0.5;
+        xgc2_observer::ScalarRecursiveLeastSquaresOptions options;
+        options.forgetting_factor = config_.rho2;
+        options.initial_covariance = 100.0;
+        options.min_abs_regressor = 1e-6;
+        rls_.setOptions(options);
+        rls_.reset(initial_thr2acc);
         last_time_sec_ = 0.0;
         valid_ = false;
     }
@@ -47,14 +54,14 @@ public:
             return false;
         }
 
-        const double gamma = 1.0 / (config_.rho2 +
-                                    normalized_thrust * covariance_ * normalized_thrust);
-        const double gain = gamma * covariance_ * normalized_thrust;
-        thr2acc_ = thr2acc_ + gain * (acc_z - normalized_thrust * thr2acc_);
-        covariance_ = (1.0 - gain * normalized_thrust) * covariance_ / config_.rho2;
+        const auto sample = rls_.update(acc_z, normalized_thrust);
+        if (!sample.measurement_accepted) {
+            return false;
+        }
 
-        if (std::isfinite(thr2acc_) && thr2acc_ > 1e-6) {
-            hover_thrust_estimate_ = std::clamp(gravity_ / thr2acc_,
+        const double thr2acc = sample.parameter;
+        if (std::isfinite(thr2acc) && thr2acc > 1e-6) {
+            hover_thrust_estimate_ = std::clamp(gravity_ / thr2acc,
                                                 config_.min_hover_thrust,
                                                 config_.max_hover_thrust);
             valid_ = true;
@@ -71,8 +78,7 @@ public:
 private:
     Config config_{};
     double gravity_{9.8066};
-    double thr2acc_{9.8066 / 0.5};
-    double covariance_{100.0};
+    xgc2_observer::ScalarRecursiveLeastSquares rls_{};
     double hover_thrust_estimate_{0.5};
     double last_time_sec_{0.0};
     bool valid_{false};

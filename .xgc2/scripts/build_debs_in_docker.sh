@@ -49,6 +49,10 @@ docker run --rm \
 
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
+    apt-get install -y --no-install-recommends ca-certificates
+    echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
+      > /etc/apt/sources.list.d/xgc2.list
+    apt-get update
     apt-get install -y --no-install-recommends \
       build-essential \
       ca-certificates \
@@ -57,6 +61,7 @@ docker run --rm \
       fakeroot \
       file \
       git \
+      libxgc2-observer-dev \
       rsync \
       ros-noetic-geometry-msgs \
       ros-noetic-mavros-msgs \
