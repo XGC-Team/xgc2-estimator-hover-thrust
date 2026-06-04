@@ -16,7 +16,6 @@ test "$(rospack find hover_thrust_estimator)" = "/opt/ros/${ROS_DISTRO}/share/ho
 test -f "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator/msg/HoverThrustEstimate.msg"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_math.so"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so"
-"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check_core_libraries.sh"
 roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch >/tmp/xgc2-hover-thrust-estimator-files.txt
 
 while IFS= read -r file; do

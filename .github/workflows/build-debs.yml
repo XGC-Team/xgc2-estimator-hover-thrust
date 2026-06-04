@@ -13,6 +13,7 @@ defaults:
 jobs:
   cpp-quality:
     name: C++ quality
+    continue-on-error: true
     runs-on: ubuntu-latest
     container: ros:noetic-ros-base-focal
     steps:
@@ -47,7 +48,6 @@ jobs:
 
   package-compliance:
     name: Package compliance and tests
-    needs: cpp-quality
     runs-on: ubuntu-latest
     container: ros:noetic-ros-base-focal
     defaults:

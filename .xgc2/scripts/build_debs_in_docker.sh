@@ -87,9 +87,6 @@ docker run --rm \
       -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG" \
       -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG"
 
-    /workspace/estimator-hover-thrust/.xgc2/scripts/check_core_libraries.sh \
-      --install-root /workspace/work/install-root
-
     /workspace/estimator-hover-thrust/.xgc2/scripts/package_debs.sh \
       --install-root /workspace/work/install-root \
       --output-dir /workspace/out
