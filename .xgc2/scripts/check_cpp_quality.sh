@@ -68,6 +68,8 @@ echo "Generating compile_commands.json..."
     -DCMAKE_BUILD_TYPE=Debug
 )
 
+"${REPO_ROOT}/.xgc2/scripts/check_core_libraries.sh" --prefix "${WORK_DIR}/devel"
+
 echo "Running clang-tidy..."
 TIDY_SOURCES=(
   "${WORK_DIR}/src/hover_thrust_estimator/src/hover_thrust_estimator_main.cpp"

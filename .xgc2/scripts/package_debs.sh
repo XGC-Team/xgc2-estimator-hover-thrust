@@ -4,9 +4,16 @@ set -euo pipefail
 INSTALL_ROOT=""
 OUTPUT_DIR=""
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
-VERSION="${PACKAGE_VERSION:-1.1.2-1}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PACKAGE="ros-noetic-xgc2-estimator-hover-thrust"
 ROS_PACKAGE="hover_thrust_estimator"
+
+product_version() {
+  awk -F': *' '/^version:[[:space:]]*/ {print $2; exit}' "${REPO_ROOT}/.xgc2/product.yml"
+}
+
+VERSION="${PACKAGE_VERSION:-$(product_version)}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,6 +34,11 @@ done
 
 if [[ -z "${INSTALL_ROOT}" || -z "${OUTPUT_DIR}" ]]; then
   echo "--install-root and --output-dir are required" >&2
+  exit 1
+fi
+
+if [[ -z "${VERSION}" ]]; then
+  echo "package version is missing" >&2
   exit 1
 fi
 
