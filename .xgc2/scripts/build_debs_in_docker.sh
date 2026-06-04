@@ -76,7 +76,9 @@ docker run --rm \
     rsync -a --delete /workspace/estimator-hover-thrust/ /workspace/work/src/hover_thrust_estimator/
 
     cd /workspace/work
+    set +u
     source /opt/ros/noetic/setup.bash
+    set -u
     DESTDIR=/workspace/work/install-root catkin_make install \
       -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
       -DCMAKE_BUILD_TYPE=Release \

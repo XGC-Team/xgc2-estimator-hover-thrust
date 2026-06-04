@@ -2,7 +2,10 @@
 set -euo pipefail
 
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
+set +u
+# shellcheck source=/dev/null
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
+set -u
 
 dpkg -s ros-noetic-xgc2-estimator-hover-thrust >/dev/null
 dpkg -s libxgc2-observer-dev >/dev/null

@@ -18,8 +18,10 @@ if [[ ! -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]]; then
   exit 1
 fi
 
+set +u
 # shellcheck source=/dev/null
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
+set -u
 
 require_command clang-format
 require_command clang-tidy

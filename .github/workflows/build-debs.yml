@@ -79,11 +79,15 @@ jobs:
           rsync -a --delete "$GITHUB_WORKSPACE/" "$work_dir/src/hover_thrust_estimator/"
 
           cd "$work_dir"
+          set +u
           source /opt/ros/noetic/setup.bash
+          set -u
           DESTDIR="$install_root" catkin_make install \
             -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
             -DCMAKE_BUILD_TYPE=Release
+          set +u
           source devel/setup.bash
+          set -u
           test "$(rospack find hover_thrust_estimator)" = "$work_dir/src/hover_thrust_estimator"
           roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch >/tmp/xgc2-hover-thrust-estimator-files.txt
 
