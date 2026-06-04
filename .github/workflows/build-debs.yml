@@ -7,7 +7,89 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  cpp-quality:
+    name: C++ quality
+    runs-on: ubuntu-latest
+    container: ros:noetic-ros-base-focal
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install quality dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates
+          echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
+            > /etc/apt/sources.list.d/xgc2.list
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            clang-format \
+            clang-tidy \
+            cmake \
+            git \
+            libxgc2-observer-dev \
+            rsync \
+            ros-noetic-geometry-msgs \
+            ros-noetic-mavros-msgs \
+            ros-noetic-roscpp \
+            ros-noetic-sensor-msgs \
+            ros-noetic-std-msgs
+
+      - name: Run C++ quality gate
+        run: .xgc2/scripts/check_cpp_quality.sh
+
+  package-compliance:
+    name: Package compliance and tests
+    needs: cpp-quality
+    runs-on: ubuntu-latest
+    container: ros:noetic-ros-base-focal
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates
+          echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
+            > /etc/apt/sources.list.d/xgc2.list
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            git \
+            libxgc2-observer-dev \
+            rsync \
+            ros-noetic-geometry-msgs \
+            ros-noetic-mavros-msgs \
+            ros-noetic-roscpp \
+            ros-noetic-roslaunch \
+            ros-noetic-rospack \
+            ros-noetic-sensor-msgs \
+            ros-noetic-std-msgs
+
+      - name: Build package and run launch compliance
+        run: |
+          set -euo pipefail
+          work_dir="${RUNNER_TEMP}/estimator-hover-thrust-compliance"
+          install_root="${RUNNER_TEMP}/estimator-hover-thrust-install-root"
+          rm -rf "$work_dir" "$install_root"
+          mkdir -p "$work_dir/src/hover_thrust_estimator"
+          rsync -a --delete "$GITHUB_WORKSPACE/" "$work_dir/src/hover_thrust_estimator/"
+
+          cd "$work_dir"
+          source /opt/ros/noetic/setup.bash
+          DESTDIR="$install_root" catkin_make install \
+            -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
+            -DCMAKE_BUILD_TYPE=Release
+          source devel/setup.bash
+          test "$(rospack find hover_thrust_estimator)" = "$work_dir/src/hover_thrust_estimator"
+          roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch >/tmp/xgc2-hover-thrust-estimator-files.txt
+
+  build-debs:
+    name: Build debs (${{ matrix.arch }})
+    needs: package-compliance
     strategy:
       fail-fast: false
       matrix:
@@ -17,11 +99,6 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    env:
-      APT_REPO_HOST: ${{ secrets.APT_REPO_HOST }}
-      APT_REPO_PORT: ${{ secrets.APT_REPO_PORT }}
-      APT_REPO_SSH_KEY: ${{ secrets.APT_REPO_SSH_KEY }}
-      APT_REPO_KNOWN_HOSTS: ${{ secrets.APT_REPO_KNOWN_HOSTS }}
 
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +114,25 @@ jobs:
         with:
           name: xgc2-estimator-hover-thrust-debs-${{ matrix.arch }}
           path: debs/*.deb
+
+  publish-apt:
+    name: Publish APT
+    needs: build-debs
+    runs-on: ubuntu-latest
+    env:
+      APT_REPO_HOST: ${{ secrets.APT_REPO_HOST }}
+      APT_REPO_PORT: ${{ secrets.APT_REPO_PORT }}
+      APT_REPO_SSH_KEY: ${{ secrets.APT_REPO_SSH_KEY }}
+      APT_REPO_KNOWN_HOSTS: ${{ secrets.APT_REPO_KNOWN_HOSTS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download deb artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: xgc2-estimator-hover-thrust-debs-*
+          path: debs
+          merge-multiple: true
 
       - name: Publish to self-hosted APT repository
         if: ${{ env.APT_REPO_HOST != '' && env.APT_REPO_PORT != '' && env.APT_REPO_SSH_KEY != '' && env.APT_REPO_KNOWN_HOSTS != '' }}

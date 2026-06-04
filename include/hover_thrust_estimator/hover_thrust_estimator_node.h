@@ -1,22 +1,23 @@
 #pragma once
 
-#include <ros/ros.h>
-
 #include <geometry_msgs/PoseStamped.h>
 #include <mavros_msgs/AttitudeTarget.h>
+#include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float64.h>
+
+#include <string>
 
 #include "hover_thrust_estimator/hover_thrust_estimator.h"
 
 namespace hover_thrust_estimator {
 
 class HoverThrustEstimatorNode {
-public:
+   public:
     explicit HoverThrustEstimatorNode(ros::NodeHandle& nh);
 
-private:
+   private:
     struct TopicSample {
         ros::Time stamp;
         bool received{false};
@@ -30,7 +31,7 @@ private:
 
     bool sampleFresh(const TopicSample& sample, const ros::Time& now) const;
     bool sampleReady(const ros::Time& now) const;
-    void publishEstimate(const ros::Time& stamp);
+    void publishEstimate();
     void publishValid(bool valid);
 
     ros::NodeHandle nh_;
@@ -68,6 +69,7 @@ private:
     TopicSample thrust_sample_;
     TopicSample altitude_sample_;
     bool thrust_valid_{false};
+    bool valid_state_published_{false};
     bool last_published_valid_{false};
 };
 
