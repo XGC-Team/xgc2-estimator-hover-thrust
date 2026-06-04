@@ -13,15 +13,18 @@ require_command() {
   fi
 }
 
-require_command clang-format
-require_command clang-tidy
-require_command catkin_make
-require_command rsync
-
 if [[ ! -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]]; then
   echo "missing ROS setup: /opt/ros/${ROS_DISTRO}/setup.bash" >&2
   exit 1
 fi
+
+# shellcheck source=/dev/null
+source "/opt/ros/${ROS_DISTRO}/setup.bash"
+
+require_command clang-format
+require_command clang-tidy
+require_command catkin_make
+require_command rsync
 
 mapfile -d '' CXX_FILES < <(
   cd "${REPO_ROOT}"
@@ -47,8 +50,6 @@ rsync -a --delete --exclude '.git' "${REPO_ROOT}/" "${WORK_DIR}/src/hover_thrust
 echo "Generating compile_commands.json..."
 (
   cd "${WORK_DIR}"
-  # shellcheck source=/dev/null
-  source "/opt/ros/${ROS_DISTRO}/setup.bash"
   catkin_make \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DCMAKE_BUILD_TYPE=Debug
