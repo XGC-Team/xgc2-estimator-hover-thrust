@@ -14,6 +14,7 @@ constexpr double kDefaultMaxHoverThrust = 0.95;
 constexpr double kDefaultMinAltitude = 0.5;
 constexpr double kDefaultSampleTimeout = 0.2;
 constexpr double kDefaultPublishRate = 50.0;
+constexpr double kDefaultFilterCutoffHz = 2.0;
 constexpr double kMaxPublishRate = 1000.0;
 constexpr double kStampFutureToleranceSec = 0.05;
 
@@ -31,7 +32,8 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
     : nh_(nh), private_nh_("~") {
     loadParams();
 
-    estimator_.setConfig(HoverThrustEstimator::Config{rho2_, min_hover_thrust_, max_hover_thrust_});
+    estimator_.setConfig(HoverThrustEstimator::Config{rho2_, min_hover_thrust_, max_hover_thrust_,
+                                                      filter_enabled_, filter_cutoff_hz_});
     estimator_.reset(gravity_, initial_hover_thrust_);
 
     estimate_pub_ = nh_.advertise<std_msgs::Float64>(estimate_topic_, 10, true);
@@ -68,6 +70,8 @@ void HoverThrustEstimatorNode::loadParams() {
     private_nh_.param("min_altitude", min_altitude_, min_altitude_);
     private_nh_.param("sample_timeout", sample_timeout_, sample_timeout_);
     private_nh_.param("publish_rate", publish_rate_, publish_rate_);
+    private_nh_.param("filter_enabled", filter_enabled_, filter_enabled_);
+    private_nh_.param("filter_cutoff_hz", filter_cutoff_hz_, filter_cutoff_hz_);
 
     gravity_ = finiteOrDefault(gravity_, kDefaultGravity);
     if (gravity_ <= estimator_limits::kMinimumGravity) {
@@ -93,6 +97,12 @@ void HoverThrustEstimatorNode::loadParams() {
         publish_rate_ = kDefaultPublishRate;
     }
     publish_rate_ = std::min(publish_rate_, kMaxPublishRate);
+    if (!std::isfinite(filter_cutoff_hz_)) {
+        filter_cutoff_hz_ = kDefaultFilterCutoffHz;
+    }
+    if (filter_cutoff_hz_ <= 0.0) {
+        filter_enabled_ = false;
+    }
 }
 
 void HoverThrustEstimatorNode::imuCallback(const sensor_msgs::Imu::ConstPtr& msg) {

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <xgc2_observer/exponential_filter.hpp>
 #include <xgc2_observer/recursive_least_squares.hpp>
 
 namespace hover_thrust_estimator {
@@ -20,6 +21,8 @@ class HoverThrustEstimator {
         double rho2{0.998};
         double min_hover_thrust{0.05};
         double max_hover_thrust{0.95};
+        bool filter_enabled{false};
+        double filter_cutoff_hz{2.0};
     };
 
     void setConfig(const Config& config) {
@@ -30,6 +33,10 @@ class HoverThrustEstimator {
         config_.min_hover_thrust = std::clamp(config_.min_hover_thrust, 0.0, 1.0);
         config_.max_hover_thrust =
             std::clamp(config_.max_hover_thrust, config_.min_hover_thrust, 1.0);
+        if (!std::isfinite(config_.filter_cutoff_hz) || config_.filter_cutoff_hz <= 0.0) {
+            config_.filter_cutoff_hz = 0.0;
+            config_.filter_enabled = false;
+        }
     }
 
     void reset(double gravity, double initial_hover_thrust) {
@@ -48,6 +55,9 @@ class HoverThrustEstimator {
         options.min_abs_regressor = estimator_limits::kMinimumNormalizedThrust;
         rls_.setOptions(options);
         rls_.reset(initial_thr2acc);
+        raw_hover_thrust_estimate_ = hover_thrust_estimate_;
+        hover_thrust_filter_.reset(config_.filter_enabled ? config_.filter_cutoff_hz : 0.0,
+                                   hover_thrust_estimate_);
         last_time_sec_ = 0.0;
         valid_ = false;
     }
@@ -70,8 +80,12 @@ class HoverThrustEstimator {
 
         const double thr2acc = sample.parameter;
         if (std::isfinite(thr2acc) && thr2acc > estimator_limits::kMinimumGravity) {
-            hover_thrust_estimate_ =
+            raw_hover_thrust_estimate_ =
                 std::clamp(gravity_ / thr2acc, config_.min_hover_thrust, config_.max_hover_thrust);
+            const double dt_s = last_time_sec_ > 0.0 ? time_sec - last_time_sec_ : 0.0;
+            hover_thrust_estimate_ = config_.filter_enabled ? hover_thrust_filter_.filter(
+                                                                  raw_hover_thrust_estimate_, dt_s)
+                                                            : raw_hover_thrust_estimate_;
             valid_ = true;
             last_time_sec_ = time_sec;
             return true;
@@ -81,6 +95,9 @@ class HoverThrustEstimator {
 
     double estimate() const {
         return hover_thrust_estimate_;
+    }
+    double rawEstimate() const {
+        return raw_hover_thrust_estimate_;
     }
     bool valid() const {
         return valid_;
@@ -93,6 +110,8 @@ class HoverThrustEstimator {
     Config config_{};
     double gravity_{9.8066};
     xgc2_observer::ScalarRecursiveLeastSquares rls_{};
+    xgc2_observer::ExponentialLowPass hover_thrust_filter_{};
+    double raw_hover_thrust_estimate_{0.5};
     double hover_thrust_estimate_{0.5};
     double last_time_sec_{0.0};
     bool valid_{false};

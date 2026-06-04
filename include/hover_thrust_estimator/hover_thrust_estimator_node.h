@@ -60,6 +60,8 @@ class HoverThrustEstimatorNode {
     double min_altitude_{0.5};
     double sample_timeout_{0.2};
     double publish_rate_{50.0};
+    bool filter_enabled_{false};
+    double filter_cutoff_hz_{2.0};
 
     double latest_acc_z_{0.0};
     double latest_thrust_{0.0};

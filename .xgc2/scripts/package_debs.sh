@@ -4,7 +4,7 @@ set -euo pipefail
 INSTALL_ROOT=""
 OUTPUT_DIR=""
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
-VERSION="${PACKAGE_VERSION:-1.1.0-1}"
+VERSION="${PACKAGE_VERSION:-1.1.1-1}"
 PACKAGE="ros-noetic-xgc2-estimator-hover-thrust"
 ROS_PACKAGE="hover_thrust_estimator"
 

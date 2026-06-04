@@ -41,6 +41,19 @@ target_link_libraries(hover_thrust_estimator_node
   ${catkin_LIBRARIES}
 )
 
+if(CATKIN_ENABLE_TESTING)
+  catkin_add_gtest(${PROJECT_NAME}_core_test
+    test/hover_thrust_estimator_test.cpp
+  )
+  if(TARGET ${PROJECT_NAME}_core_test)
+    target_compile_features(${PROJECT_NAME}_core_test PUBLIC cxx_std_17)
+    target_link_libraries(${PROJECT_NAME}_core_test
+      xgc2_observer::observer
+      ${catkin_LIBRARIES}
+    )
+  endif()
+endif()
+
 install(TARGETS hover_thrust_estimator_core hover_thrust_estimator_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

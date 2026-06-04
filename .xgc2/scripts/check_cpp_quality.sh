@@ -29,13 +29,13 @@ require_command catkin_make
 require_command rsync
 
 if git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-mapfile -d '' CXX_FILES < <(
-  cd "${REPO_ROOT}"
-  find include src -type f \
-    \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o \
-       -name '*.h' -o -name '*.hpp' -o -name '*.hh' -o -name '*.hxx' \) \
-    -print0 | sort -z
-)
+  mapfile -d '' CXX_FILES < <(
+    cd "${REPO_ROOT}"
+    find include src test -type f \
+      \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o \
+        -name '*.h' -o -name '*.hpp' -o -name '*.hh' -o -name '*.hxx' \) \
+      -print0 | sort -z
+  )
 else
   mapfile -d '' CXX_FILES < <(
     cd "${REPO_ROOT}"
