@@ -178,11 +178,7 @@ void HoverThrustEstimatorRuntime::setupMachine() {
             .impl(std::make_unique<RuntimeState>(stateName(state)));
     }
     for (const HoverThrustRuntimeState state : kRuntimeStates) {
-        builder.transition()
-            .from(kRootState)
-            .to(stateId(state))
-            .on(eventId(state))
-            .global();
+        builder.transition().from(kRootState).to(stateId(state)).on(eventId(state)).global();
     }
     auto machine_result = builder.build();
     requireOk(machine_result.status, "build runtime state machine");
