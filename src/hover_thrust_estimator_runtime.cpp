@@ -165,25 +165,28 @@ void HoverThrustEstimatorRuntime::normalizeConfig() {
 }
 
 void HoverThrustEstimatorRuntime::setupMachine() {
-    machine_ = std::make_unique<sm::StateMachine>("hover_thrust_estimator_runtime");
-    requireOk(machine_->addState({kRootState}, std::make_unique<RuntimeState>("root")),
-              "add root state");
+    auto builder = sm::StateMachine::builder("hover_thrust_estimator_runtime");
+    builder.region(sm::kDefaultRegion)
+        .initial(kRootState)
+        .state(kRootState)
+        .name("root")
+        .impl(std::make_unique<RuntimeState>("root"))
+        .initial(stateId(HoverThrustRuntimeState::kInitializing));
     for (const HoverThrustRuntimeState state : kRuntimeStates) {
-        requireOk(machine_->addState({stateId(state), kRootState},
-                                     std::make_unique<RuntimeState>(stateName(state))),
-                  "add runtime state");
+        builder.state(stateId(state))
+            .name(stateName(state))
+            .impl(std::make_unique<RuntimeState>(stateName(state)));
     }
-    requireOk(machine_->setInitialState(
-                  {sm::kDefaultRegion, stateId(HoverThrustRuntimeState::kInitializing)}),
-              "set initial state");
     for (const HoverThrustRuntimeState state : kRuntimeStates) {
-        sm::TransitionRule transition;
-        transition.from = kRootState;
-        transition.target = stateId(state);
-        transition.event = eventId(state);
-        transition.global = true;
-        requireOk(machine_->addTransition(transition), "add runtime transition");
+        builder.transition()
+            .from(kRootState)
+            .to(stateId(state))
+            .on(eventId(state))
+            .global();
     }
+    auto machine_result = builder.build();
+    requireOk(machine_result.status, "build runtime state machine");
+    machine_ = std::move(machine_result.value);
     requireOk(machine_->start(), "start runtime state machine");
 }
 
