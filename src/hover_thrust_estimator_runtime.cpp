@@ -4,21 +4,23 @@
 #include <array>
 #include <cmath>
 #include <stdexcept>
+#include <string>
 #include <utility>
+
+#include "hover_thrust_estimator/state_machine/airborne_state.h"
+#include "hover_thrust_estimator/state_machine/fault_state.h"
+#include "hover_thrust_estimator/state_machine/ground_state.h"
+#include "hover_thrust_estimator/state_machine/health_monitor_state.h"
+#include "hover_thrust_estimator/state_machine/self_check_state.h"
 
 namespace hover_thrust_estimator {
 namespace {
 
 namespace sm = state_machine;
 
-constexpr sm::StateId kRootState = 100;
 constexpr double kDefaultSampleTimeout = 0.2;
 constexpr double kDefaultOutputSlewRate = 0.1;
 constexpr double kMinimumInputRateHz = 1.0e-3;
-
-constexpr std::array<HoverThrustRuntimeState, 4> kRuntimeStates{
-    HoverThrustRuntimeState::kSelfCheck, HoverThrustRuntimeState::kGround,
-    HoverThrustRuntimeState::kAirborne, HoverThrustRuntimeState::kFault};
 
 void requireOk(const sm::Status& status, const char* operation) {
     if (!status.ok()) {
@@ -26,24 +28,16 @@ void requireOk(const sm::Status& status, const char* operation) {
     }
 }
 
-class RuntimeState final : public sm::State {
-   public:
-    explicit RuntimeState(std::string name) : name_(std::move(name)) {}
-
-    std::string name() const override {
-        return name_;
-    }
-
-   private:
-    std::string name_;
-};
-
 bool finitePositive(double value) {
     return std::isfinite(value) && value > 0.0;
 }
 
 double finiteOrDefault(double value, double fallback) {
     return std::isfinite(value) ? value : fallback;
+}
+
+bool targets(const HoverThrustEstimatorRuntime& runtime, HoverThrustRuntimeState state) {
+    return runtime.targetState() == state;
 }
 
 }  // namespace
@@ -65,67 +59,52 @@ void HoverThrustEstimatorRuntime::reset() {
         config_.filter_cutoff_hz});
     estimator_.reset(config_.gravity, config_.initial_hover_thrust);
     input_ = Input{};
+    health_ = Classification{};
     hover_thrust_output_ = config_.initial_hover_thrust;
     raw_hover_thrust_output_ = config_.initial_hover_thrust;
+    current_time_sec_ = 0.0;
     last_estimate_stamp_sec_ = 0.0;
+    raw_update_requested_ = false;
+    fault_requested_ = false;
     output_slew_limiter_.reset(config_.output_slew_rate, hover_thrust_output_);
     state_ = HoverThrustRuntimeState::kSelfCheck;
     flags_ = HoverThrustRuntimeFlag::kDegraded;
+    last_output_ = makeOutput(state_, flags_, false, health_, current_time_sec_);
     setupMachine();
 }
 
-void HoverThrustEstimatorRuntime::postInputEvent(HoverThrustInputEvent event, const Input& input) {
-    switch (event) {
-        case HoverThrustInputEvent::kImuUpdated:
-            input_.imu_acc_z = input.imu_acc_z;
-            break;
-        case HoverThrustInputEvent::kThrustUpdated:
-            input_.normalized_thrust = input.normalized_thrust;
-            input_.thrust_ignored = input.thrust_ignored;
-            break;
-        case HoverThrustInputEvent::kAltitudeUpdated:
-            input_.altitude = input.altitude;
-            break;
-    }
+sm::Status HoverThrustEstimatorRuntime::postInputEvent(sm::Event event, const Input& input) {
+    applyInputEvent(event.id, input);
+    event.category = sm::EventCategory::kInput;
+    return machine_->postEvent(std::move(event));
 }
 
-HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(
-    HoverThrustOutputEvent event, double now_sec) {
-    Classification classification = classify(now_sec);
-    bool sample_used = false;
-    uint32_t target_flags = classification.flags;
+void HoverThrustEstimatorRuntime::postInputEvent(HoverThrustInputEvent event, const Input& input) {
+    requireOk(postInputEvent(inputEvent(event, input.now_sec), input), "post input event");
+}
 
-    if (event == HoverThrustOutputEvent::kUpdateRawEstimate && classification.ready) {
-        sample_used = estimator_.update(input_.imu_acc_z.value, input_.normalized_thrust.value,
-                                        input_.normalized_thrust.stamp_sec);
-        if (sample_used) {
-            raw_hover_thrust_output_ = std::clamp(
-                estimator_.rawEstimate(), config_.min_hover_thrust, config_.max_hover_thrust);
-            const double dt_s =
-                last_estimate_stamp_sec_ > 0.0
-                    ? std::max(0.0, input_.normalized_thrust.stamp_sec - last_estimate_stamp_sec_)
-                    : 0.0;
-            const double filtered = std::clamp(estimator_.estimate(), config_.min_hover_thrust,
-                                               config_.max_hover_thrust);
-            hover_thrust_output_ = std::clamp(output_slew_limiter_.filter(filtered, dt_s),
-                                              config_.min_hover_thrust, config_.max_hover_thrust);
-            last_estimate_stamp_sec_ = input_.normalized_thrust.stamp_sec;
-            classification.estimate_valid = true;
-        } else {
-            target_flags |= HoverThrustRuntimeFlag::kEstimatorRejected;
-        }
-    } else if (event == HoverThrustOutputEvent::kUpdateRawEstimate &&
-               classification.state == HoverThrustRuntimeState::kAirborne &&
-               !classification.ready) {
-        target_flags |= HoverThrustRuntimeFlag::kRawEstimateStale;
-    }
+void HoverThrustEstimatorRuntime::requestRawUpdate(double now_sec) {
+    current_time_sec_ = now_sec;
+    raw_update_requested_ = true;
+    sm::Event event(event_type::INPUT_RAW_UPDATE_DUE, sm::EventTimestamp{now_sec});
+    event.source = "raw_update_timer";
+    event.category = sm::EventCategory::kInput;
+    requireOk(machine_->postEvent(std::move(event)), "post raw update event");
+}
 
-    transitionTo(classification.state);
-    if (state_ == HoverThrustRuntimeState::kFault) {
-        target_flags |= HoverThrustRuntimeFlag::kStateMachineFault;
+HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double now_sec) {
+    current_time_sec_ = now_sec;
+    refreshHealth();
+    const auto transition_result = machine_->update({64, 64, false});
+    const auto tick_result =
+        transition_result.status.ok() ? machine_->update({64, 64, true}) : transition_result;
+    if (!tick_result.status.ok()) {
+        fault_requested_ = true;
+        state_ = HoverThrustRuntimeState::kFault;
+        flags_ |= HoverThrustRuntimeFlag::kStateMachineFault;
+        last_output_ = makeOutput(state_, flags_, false, health_, current_time_sec_);
     }
-    flags_ = target_flags;
-    return makeOutput(state_, flags_, sample_used, classification, now_sec);
+    return last_output_;
 }
 
 HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::output(double now_sec) const {
@@ -133,26 +112,61 @@ HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::output(double n
     return makeOutput(state_, flags_, false, classification, now_sec);
 }
 
-std::string HoverThrustEstimatorRuntime::stateName(HoverThrustRuntimeState state) {
-    switch (state) {
-        case HoverThrustRuntimeState::kSelfCheck:
-            return "self_check";
-        case HoverThrustRuntimeState::kGround:
-            return "ground";
-        case HoverThrustRuntimeState::kAirborne:
-            return "airborne";
-        case HoverThrustRuntimeState::kFault:
-            return "fault";
+void HoverThrustEstimatorRuntime::refreshHealth() {
+    health_ = classify(current_time_sec_);
+}
+
+void HoverThrustEstimatorRuntime::enterState(HoverThrustRuntimeState state) {
+    state_ = state;
+}
+
+void HoverThrustEstimatorRuntime::performSelfCheck() {
+    last_output_ = publishForState(HoverThrustRuntimeState::kSelfCheck, health_.flags, false);
+}
+
+void HoverThrustEstimatorRuntime::performGround() {
+    last_output_ = publishForState(HoverThrustRuntimeState::kGround, health_.flags, false);
+}
+
+void HoverThrustEstimatorRuntime::performAirborne() {
+    uint32_t target_flags = health_.flags;
+    bool sample_used = false;
+
+    if (raw_update_requested_) {
+        if (health_.ready) {
+            sample_used = estimator_.update(input_.imu_acc_z.value, input_.normalized_thrust.value,
+                                            input_.normalized_thrust.stamp_sec);
+            if (sample_used) {
+                raw_hover_thrust_output_ = std::clamp(
+                    estimator_.rawEstimate(), config_.min_hover_thrust, config_.max_hover_thrust);
+                const double dt_s = last_estimate_stamp_sec_ > 0.0
+                                        ? std::max(0.0, input_.normalized_thrust.stamp_sec -
+                                                            last_estimate_stamp_sec_)
+                                        : 0.0;
+                const double filtered = std::clamp(estimator_.estimate(), config_.min_hover_thrust,
+                                                   config_.max_hover_thrust);
+                hover_thrust_output_ =
+                    std::clamp(output_slew_limiter_.filter(filtered, dt_s),
+                               config_.min_hover_thrust, config_.max_hover_thrust);
+                last_estimate_stamp_sec_ = input_.normalized_thrust.stamp_sec;
+                health_.estimate_valid = true;
+            } else {
+                target_flags |= HoverThrustRuntimeFlag::kEstimatorRejected;
+            }
+        } else {
+            target_flags |= HoverThrustRuntimeFlag::kRawEstimateStale;
+        }
+        raw_update_requested_ = false;
     }
-    return "fault";
+
+    last_output_ = publishForState(HoverThrustRuntimeState::kAirborne, target_flags, sample_used);
 }
 
-sm::StateId HoverThrustEstimatorRuntime::stateId(HoverThrustRuntimeState state) {
-    return 101u + static_cast<sm::StateId>(state);
-}
-
-sm::EventId HoverThrustEstimatorRuntime::eventId(HoverThrustRuntimeState state) {
-    return 201u + static_cast<sm::EventId>(state);
+void HoverThrustEstimatorRuntime::performFault() {
+    raw_update_requested_ = false;
+    last_output_ =
+        publishForState(HoverThrustRuntimeState::kFault,
+                        health_.flags | HoverThrustRuntimeFlag::kStateMachineFault, false);
 }
 
 void HoverThrustEstimatorRuntime::normalizeConfig() {
@@ -187,44 +201,116 @@ void HoverThrustEstimatorRuntime::normalizeConfig() {
 }
 
 void HoverThrustEstimatorRuntime::setupMachine() {
-    auto builder = sm::StateMachine::builder("hover_thrust_estimator_runtime");
-    builder.region(sm::kDefaultRegion)
-        .initial(kRootState)
-        .state(kRootState)
-        .name("root")
-        .impl(std::make_unique<RuntimeState>("root"))
-        .initial(stateId(HoverThrustRuntimeState::kSelfCheck));
-    for (const HoverThrustRuntimeState state : kRuntimeStates) {
-        builder.state(stateId(state))
-            .name(stateName(state))
-            .impl(std::make_unique<RuntimeState>(stateName(state)));
+    auto builder = sm::StateMachine::builder("HoverThrustEstimatorStateMachine");
+    builder.region(region_type::HEALTH)
+        .name("health")
+        .order(0)
+        .initial(state_type::HealthMonitor)
+        .state(state_type::HealthMonitor)
+        .name("HealthMonitor")
+        .impl(std::make_unique<HealthMonitorState>(*this))
+        .endRegion()
+        .region(region_type::ESTIMATION)
+        .name("estimation")
+        .order(10)
+        .initial(state_type::SelfCheck)
+        .state(state_type::SelfCheck)
+        .name("SelfCheck")
+        .impl(std::make_unique<SelfCheckState>(*this))
+        .state(state_type::Ground)
+        .name("Ground")
+        .impl(std::make_unique<GroundState>(*this))
+        .state(state_type::Airborne)
+        .name("Airborne")
+        .impl(std::make_unique<AirborneState>(*this))
+        .state(state_type::Fault)
+        .name("Fault")
+        .impl(std::make_unique<FaultState>(*this))
+        .endRegion();
+
+    const std::array<sm::StateId, 4> states{state_type::SelfCheck, state_type::Ground,
+                                            state_type::Airborne, state_type::Fault};
+    for (const sm::StateId from : states) {
+        if (from != state_type::SelfCheck) {
+            builder.transition()
+                .from(from)
+                .to(state_type::SelfCheck)
+                .priority(transition_priority::AUTOMATIC)
+                .when([this](const sm::GuardContext&) {
+                    return targets(*this, HoverThrustRuntimeState::kSelfCheck);
+                });
+        }
+        if (from != state_type::Ground) {
+            builder.transition()
+                .from(from)
+                .to(state_type::Ground)
+                .priority(transition_priority::AUTOMATIC)
+                .when([this](const sm::GuardContext&) {
+                    return targets(*this, HoverThrustRuntimeState::kGround);
+                });
+        }
+        if (from != state_type::Airborne) {
+            builder.transition()
+                .from(from)
+                .to(state_type::Airborne)
+                .priority(transition_priority::AUTOMATIC)
+                .when([this](const sm::GuardContext&) {
+                    return targets(*this, HoverThrustRuntimeState::kAirborne);
+                });
+        }
+        if (from != state_type::Fault) {
+            builder.transition()
+                .from(from)
+                .to(state_type::Fault)
+                .priority(transition_priority::FAULT)
+                .when([this](const sm::GuardContext&) {
+                    return targets(*this, HoverThrustRuntimeState::kFault);
+                });
+        }
     }
-    for (const HoverThrustRuntimeState state : kRuntimeStates) {
-        builder.transition().from(kRootState).to(stateId(state)).on(eventId(state)).global();
-    }
+
     auto machine_result = builder.build();
-    requireOk(machine_result.status, "build runtime state machine");
+    requireOk(machine_result.status, "build hover thrust estimator state machine");
     machine_ = std::move(machine_result.value);
-    requireOk(machine_->start(), "start runtime state machine");
+    requireOk(machine_->start(), "start hover thrust estimator state machine");
 }
 
-void HoverThrustEstimatorRuntime::transitionTo(HoverThrustRuntimeState state) {
-    if (state == state_) {
-        return;
+sm::Event HoverThrustEstimatorRuntime::inputEvent(HoverThrustInputEvent event, double timestamp) {
+    sm::Event result;
+    switch (event) {
+        case HoverThrustInputEvent::kImuUpdated:
+            result.id = event_type::INPUT_IMU_UPDATED;
+            result.source = "imu";
+            break;
+        case HoverThrustInputEvent::kThrustUpdated:
+            result.id = event_type::INPUT_THRUST_UPDATED;
+            result.source = "target_attitude";
+            break;
+        case HoverThrustInputEvent::kAltitudeUpdated:
+            result.id = event_type::INPUT_ALTITUDE_UPDATED;
+            result.source = "altitude";
+            break;
     }
+    result.timestamp = timestamp;
+    result.category = sm::EventCategory::kInput;
+    return result;
+}
 
-    sm::Status status = machine_->postEvent(sm::Event(eventId(state)));
-    if (status.ok()) {
-        const auto update = machine_->update({4, 4, false});
-        status = update.status;
+void HoverThrustEstimatorRuntime::applyInputEvent(sm::EventId event_id, const Input& input) {
+    switch (event_id) {
+        case event_type::INPUT_IMU_UPDATED:
+            input_.imu_acc_z = input.imu_acc_z;
+            break;
+        case event_type::INPUT_THRUST_UPDATED:
+            input_.normalized_thrust = input.normalized_thrust;
+            input_.thrust_ignored = input.thrust_ignored;
+            break;
+        case event_type::INPUT_ALTITUDE_UPDATED:
+            input_.altitude = input.altitude;
+            break;
+        default:
+            break;
     }
-
-    if (!status.ok()) {
-        state_ = HoverThrustRuntimeState::kFault;
-        flags_ |= HoverThrustRuntimeFlag::kStateMachineFault;
-        return;
-    }
-    state_ = state;
 }
 
 HoverThrustEstimatorRuntime::Classification HoverThrustEstimatorRuntime::classify(
@@ -333,6 +419,16 @@ bool HoverThrustEstimatorRuntime::sampleTimeJumped(const Sample& sample, double 
         return true;
     }
     return std::isfinite(sample.period_sec) && sample.period_sec < -0.05;
+}
+
+HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::publishForState(
+    HoverThrustRuntimeState state, uint32_t flags, bool sample_used) {
+    if (state == HoverThrustRuntimeState::kFault) {
+        flags |= HoverThrustRuntimeFlag::kStateMachineFault;
+    }
+    flags_ = flags;
+    state_ = state;
+    return makeOutput(state_, flags_, sample_used, health_, current_time_sec_);
 }
 
 HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::makeOutput(

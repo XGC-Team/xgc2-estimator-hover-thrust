@@ -100,7 +100,7 @@ TEST(HoverThrustEstimatorRuntimeTest, MissingImuPublishesSelfCheckOutputWithFlag
     input.now_sec = 1.0;
 
     runtime.postInputEvent(HoverThrustInputEvent::kThrustUpdated, input);
-    const auto output = runtime.update(HoverThrustOutputEvent::kPublishEstimate, 1.0);
+    const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kSelfCheck);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kImuMissing, 0u);
@@ -114,7 +114,8 @@ TEST(HoverThrustEstimatorRuntimeTest, ReadySamplesMoveToAirborneState) {
     HoverThrustEstimatorRuntime runtime;
 
     postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
-    const auto output = runtime.update(HoverThrustOutputEvent::kUpdateRawEstimate, 1.0);
+    runtime.requestRawUpdate(1.0);
+    const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kAirborne);
     EXPECT_EQ(output.flags, 0u);
@@ -129,14 +130,15 @@ TEST(HoverThrustEstimatorRuntimeTest, ReadySamplesMoveToAirborneState) {
 TEST(HoverThrustEstimatorRuntimeTest, StaleInputHoldsLastSafeEstimate) {
     HoverThrustEstimatorRuntime runtime;
     postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
-    const auto estimated = runtime.update(HoverThrustOutputEvent::kUpdateRawEstimate, 1.0);
+    runtime.requestRawUpdate(1.0);
+    runtime.update(1.0);
     auto stale = readyInput(2.0, 0.7, 0.5);
     stale.imu_acc_z.stamp_sec = 1.0;
     stale.normalized_thrust.stamp_sec = 1.0;
     stale.altitude.stamp_sec = 1.0;
 
     postAllInputEvents(runtime, stale);
-    const auto output = runtime.update(HoverThrustOutputEvent::kPublishEstimate, 2.0);
+    const auto output = runtime.update(2.0);
 
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kSelfCheck);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kImuStale, 0u);
@@ -154,7 +156,7 @@ TEST(HoverThrustEstimatorRuntimeTest, BelowMinimumAltitudeHoldsOutputAndReportsS
     input.altitude.value = 0.1;
 
     postAllInputEvents(runtime, input);
-    const auto output = runtime.update(HoverThrustOutputEvent::kPublishEstimate, 1.0);
+    const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kGround);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kBelowMinAltitude, 0u);
@@ -170,7 +172,7 @@ TEST(HoverThrustEstimatorRuntimeTest, IgnoredThrustReportsInvalidThrust) {
     input.thrust_ignored = true;
 
     postAllInputEvents(runtime, input);
-    const auto output = runtime.update(HoverThrustOutputEvent::kPublishEstimate, 1.0);
+    const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kSelfCheck);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kThrustInvalid, 0u);

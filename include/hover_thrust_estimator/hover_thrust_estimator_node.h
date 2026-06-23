@@ -1,23 +1,23 @@
 #pragma once
 
-#include <geometry_msgs/PoseStamped.h>
-#include <hover_thrust_estimator/HoverThrustEstimate.h>
-#include <mavros_msgs/AttitudeTarget.h>
 #include <ros/ros.h>
-#include <sensor_msgs/Imu.h>
-#include <std_msgs/Bool.h>
-#include <std_msgs/Float64.h>
 
+#include <memory>
 #include <string>
+#include <vector>
 
-#include "hover_thrust_estimator/hover_thrust_estimator.h"
 #include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
+#include "hover_thrust_estimator/input/hover_thrust_input_producer.h"
+#include "hover_thrust_estimator/output/hover_thrust_output_consumer.h"
+#include "hover_thrust_estimator/output/output_event_consumer.h"
+#include "hover_thrust_estimator/output/ros_output_runtime.h"
 
 namespace hover_thrust_estimator {
 
 class HoverThrustEstimatorNode {
    public:
     explicit HoverThrustEstimatorNode(ros::NodeHandle& nh);
+    ~HoverThrustEstimatorNode();
     void run(double frequency);
     double publishRate() const {
         return publish_rate_;
@@ -25,29 +25,15 @@ class HoverThrustEstimatorNode {
 
    private:
     void loadParams();
-    void imuCallback(const sensor_msgs::Imu::ConstPtr& msg);
-    void targetAttitudeCallback(const mavros_msgs::AttitudeTarget::ConstPtr& msg);
-    void poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
-
-    void publishOutput(const HoverThrustEstimatorRuntime::Output& output, const ros::Time& stamp);
-    void publishEstimate(double hover_thrust);
-    void publishValid(bool valid);
-    void postInputEvent(HoverThrustInputEvent event);
-    void consumeOutputEvent(HoverThrustOutputEvent event, const ros::Time& stamp);
-    static void updateSamplePeriod(HoverThrustEstimatorRuntime::Sample& sample, double stamp_sec);
+    void dispatchOutputEvents(const std::vector<::state_machine::Event>& events);
 
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
 
-    ros::Subscriber imu_sub_;
-    ros::Subscriber target_attitude_sub_;
-    ros::Subscriber pose_sub_;
-    ros::Publisher estimate_state_pub_;
-    ros::Publisher estimate_pub_;
-    ros::Publisher valid_pub_;
-
     HoverThrustEstimatorRuntime runtime_;
-    HoverThrustEstimatorRuntime::Input runtime_input_;
+    RosOutputExecutor output_event_executor_;
+    OutputEventDispatcher output_event_dispatcher_;
+    std::unique_ptr<HoverThrustInputProducer> input_producer_;
 
     std::string imu_topic_{"mavros/imu/data"};
     std::string target_attitude_topic_{"mavros/setpoint_raw/target_attitude"};
