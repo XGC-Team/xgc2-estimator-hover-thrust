@@ -7,6 +7,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   geometry_msgs
   mavros_msgs
+  ros1_utils
   message_generation
 )
 find_package(xgc2_observer REQUIRED CONFIG)
@@ -25,7 +26,7 @@ generate_messages(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES hover_thrust_estimator_math hover_thrust_estimator_core
-  CATKIN_DEPENDS roscpp std_msgs sensor_msgs geometry_msgs mavros_msgs message_runtime
+  CATKIN_DEPENDS roscpp std_msgs sensor_msgs geometry_msgs mavros_msgs ros1_utils message_runtime
 )
 
 include_directories(

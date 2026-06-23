@@ -70,6 +70,7 @@ docker run --rm \
       ros-noetic-roscpp \
       ros-noetic-roslaunch \
       ros-noetic-rospack \
+      ros-noetic-xgc2-ros1-utils \
       ros-noetic-sensor-msgs \
       ros-noetic-std-msgs
 

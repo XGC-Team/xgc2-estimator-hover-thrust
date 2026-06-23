@@ -1,5 +1,7 @@
 #include "hover_thrust_estimator/hover_thrust_estimator_node.h"
 
+#include <ros1_utils/param_utils.h>
+
 #include <algorithm>
 #include <cmath>
 #include <memory>
@@ -116,25 +118,37 @@ void HoverThrustEstimatorNode::run(double frequency) {
 }
 
 void HoverThrustEstimatorNode::loadParams() {
-    private_nh_.param("imu_topic", imu_topic_, imu_topic_);
-    private_nh_.param("target_attitude_topic", target_attitude_topic_, target_attitude_topic_);
-    private_nh_.param("altitude_topic", altitude_topic_, altitude_topic_);
-    private_nh_.param("estimate_state_topic", estimate_state_topic_, estimate_state_topic_);
-    private_nh_.param("estimate_topic", estimate_topic_, estimate_topic_);
+    ros1_utils::getParamWithLog(private_nh_, "imu_topic", imu_topic_, "IMU topic");
+    ros1_utils::getParamWithLog(private_nh_, "target_attitude_topic", target_attitude_topic_,
+                                "Target attitude topic");
+    ros1_utils::getParamWithLog(private_nh_, "altitude_topic", altitude_topic_, "Altitude topic");
+    ros1_utils::getParamWithLog(private_nh_, "estimate_state_topic", estimate_state_topic_,
+                                "Hover thrust estimate state topic");
+    ros1_utils::getParamWithLog(private_nh_, "estimate_topic", estimate_topic_,
+                                "Legacy hover thrust estimate topic");
 
-    private_nh_.param("gravity", gravity_, gravity_);
-    private_nh_.param("initial_hover_thrust", initial_hover_thrust_, initial_hover_thrust_);
-    private_nh_.param("rho2", rho2_, rho2_);
-    private_nh_.param("min_hover_thrust", min_hover_thrust_, min_hover_thrust_);
-    private_nh_.param("max_hover_thrust", max_hover_thrust_, max_hover_thrust_);
-    private_nh_.param("min_altitude", min_altitude_, min_altitude_);
-    private_nh_.param("sample_timeout", sample_timeout_, sample_timeout_);
-    private_nh_.param("loop_rate", loop_rate_, loop_rate_);
-    private_nh_.param("publish_rate", publish_rate_, publish_rate_);
-    private_nh_.param("raw_update_rate", raw_update_rate_, raw_update_rate_);
-    private_nh_.param("filter_enabled", filter_enabled_, filter_enabled_);
-    private_nh_.param("filter_cutoff_hz", filter_cutoff_hz_, filter_cutoff_hz_);
-    private_nh_.param("input_rate_low_hz", input_rate_low_hz_, input_rate_low_hz_);
+    ros1_utils::getParamWithLog(private_nh_, "gravity", gravity_, "Gravity");
+    ros1_utils::getParamWithLog(private_nh_, "initial_hover_thrust", initial_hover_thrust_,
+                                "Initial hover thrust");
+    ros1_utils::getParamWithLog(private_nh_, "rho2", rho2_, "RLS forgetting factor");
+    ros1_utils::getParamWithLog(private_nh_, "min_hover_thrust", min_hover_thrust_,
+                                "Minimum hover thrust");
+    ros1_utils::getParamWithLog(private_nh_, "max_hover_thrust", max_hover_thrust_,
+                                "Maximum hover thrust");
+    ros1_utils::getParamWithLog(private_nh_, "min_altitude", min_altitude_,
+                                "Minimum estimation altitude");
+    ros1_utils::getParamWithLog(private_nh_, "sample_timeout", sample_timeout_,
+                                "Input sample timeout");
+    ros1_utils::getParamWithLog(private_nh_, "loop_rate", loop_rate_, "Estimator loop rate");
+    ros1_utils::getParamWithLog(private_nh_, "publish_rate", publish_rate_, "Publish rate");
+    ros1_utils::getParamWithLog(private_nh_, "raw_update_rate", raw_update_rate_,
+                                "RLS update rate");
+    ros1_utils::getParamWithLog(private_nh_, "filter_enabled", filter_enabled_,
+                                "Hover thrust low-pass filter");
+    ros1_utils::getParamWithLog(private_nh_, "filter_cutoff_hz", filter_cutoff_hz_,
+                                "Hover thrust low-pass cutoff");
+    ros1_utils::getParamWithLog(private_nh_, "input_rate_low_hz", input_rate_low_hz_,
+                                "Minimum healthy input rate");
 
     gravity_ = finiteOrDefault(gravity_, kDefaultGravity);
     if (gravity_ <= estimator_limits::kMinimumGravity) {
