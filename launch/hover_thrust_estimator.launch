@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <launch>
     <arg name="ns" default="uav1"/>
+    <arg name="config_file" default="$(find hover_thrust_estimator)/config/hover_thrust_estimator.yaml"/>
     <arg name="gravity" default="9.8066"/>
     <arg name="initial_hover_thrust" default="0.3"/>
     <arg name="rho2" default="0.998"/>
@@ -23,7 +24,9 @@
         <node pkg="hover_thrust_estimator"
               type="hover_thrust_estimator_node"
               name="hover_thrust_estimator"
-              output="screen">
+              output="screen"
+              clear_params="true">
+            <rosparam command="load" file="$(arg config_file)"/>
             <param name="gravity" value="$(arg gravity)"/>
             <param name="initial_hover_thrust" value="$(arg initial_hover_thrust)"/>
             <param name="rho2" value="$(arg rho2)"/>

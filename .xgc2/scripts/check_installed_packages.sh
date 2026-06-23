@@ -17,8 +17,17 @@ test -f /usr/include/state_machine/state_machine.hpp
 test "$(rospack find hover_thrust_estimator)" = "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator"
 test -f "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator/config/hover_thrust_estimator.yaml"
 test -f "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator/msg/HoverThrustEstimate.msg"
+test -f "/opt/ros/${ROS_DISTRO}/lib/python3/dist-packages/hover_thrust_estimator/msg/_HoverThrustEstimate.py"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_math.so"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so"
+rosmsg show hover_thrust_estimator/HoverThrustEstimate | grep -q '^float64 hover_thrust$'
+python3 - <<'PY'
+from hover_thrust_estimator.msg import HoverThrustEstimate
+
+msg = HoverThrustEstimate()
+msg.hover_thrust = 0.3
+assert abs(msg.hover_thrust - 0.3) < 1e-12
+PY
 roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch >/tmp/xgc2-hover-thrust-estimator-files.txt
 
 while IFS= read -r file; do

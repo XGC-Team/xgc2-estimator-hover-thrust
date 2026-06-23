@@ -69,6 +69,7 @@ mkdir -p "${pkg_root}"
 
 copy_path "${PREFIX_ROOT}/share/${ROS_PACKAGE}" "${pkg_root}"
 copy_path "${PREFIX_ROOT}/lib/${ROS_PACKAGE}" "${pkg_root}"
+copy_path "${PREFIX_ROOT}/lib/python3/dist-packages/${ROS_PACKAGE}" "${pkg_root}"
 copy_path "${PREFIX_ROOT}/include/${ROS_PACKAGE}" "${pkg_root}"
 copy_path "${PREFIX_ROOT}/lib/libhover_thrust_estimator_math.so" "${pkg_root}"
 copy_path "${PREFIX_ROOT}/lib/libhover_thrust_estimator_core.so" "${pkg_root}"
