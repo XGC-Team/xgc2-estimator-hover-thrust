@@ -12,7 +12,8 @@ namespace hover_thrust_estimator {
 class HoverThrustOutputModel {
    public:
     void reset(const HoverThrustEstimatorConfig& config) {
-        config_ = config_utils::normalizeConfig(config);
+        config_ = config;
+        config_utils::normalizeConfig(config_);
         target_hover_thrust_ = config_.initial_hover_thrust;
         hover_thrust_ = config_.initial_hover_thrust;
         raw_hover_thrust_ = config_.initial_hover_thrust;

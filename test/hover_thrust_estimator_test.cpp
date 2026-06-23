@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 
+#include "hover_thrust_estimator/common/config_utils.h"
 #include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
 
 namespace hover_thrust_estimator {
@@ -103,6 +104,29 @@ TEST(HoverThrustEstimatorTest, RawEstimateIsClampedToConfiguredBounds) {
 
     ASSERT_TRUE(estimator.update(accelerationForHover(0.01, 0.5), 0.5, 1.02));
     EXPECT_NEAR(estimator.rawEstimate(), 0.15, 1.0e-12);
+}
+
+TEST(HoverThrustConfigTest, NormalizeLoopAndEstimatorRatesInPlace) {
+    HoverThrustEstimatorConfig config;
+    config.publish_rate_hz = 6000.0;
+    config.raw_update_rate_hz = 6000.0;
+    double loop_rate_hz = 10000.0;
+
+    config_utils::normalizeLoopAndEstimatorRates(loop_rate_hz, config);
+
+    EXPECT_DOUBLE_EQ(loop_rate_hz, config_utils::kMaxLoopRateHz);
+    EXPECT_DOUBLE_EQ(config.publish_rate_hz, config_utils::kMaxLoopRateHz);
+    EXPECT_DOUBLE_EQ(config.raw_update_rate_hz, config_utils::kMaxLoopRateHz);
+
+    config.publish_rate_hz = -1.0;
+    config.raw_update_rate_hz = 0.0;
+    loop_rate_hz = std::numeric_limits<double>::quiet_NaN();
+
+    config_utils::normalizeLoopAndEstimatorRates(loop_rate_hz, config);
+
+    EXPECT_DOUBLE_EQ(loop_rate_hz, config_utils::kDefaultLoopRateHz);
+    EXPECT_DOUBLE_EQ(config.publish_rate_hz, config_utils::kDefaultPublishRateHz);
+    EXPECT_DOUBLE_EQ(config.raw_update_rate_hz, config_utils::kDefaultRawUpdateRateHz);
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, StartupOutputKeepsInitialHoverThrust) {

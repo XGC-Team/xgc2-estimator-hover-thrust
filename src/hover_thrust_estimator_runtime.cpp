@@ -25,12 +25,13 @@ void requireOk(const sm::Status& status, const char* operation) {
 }  // namespace
 
 HoverThrustEstimatorRuntime::HoverThrustEstimatorRuntime() {
-    config_ = config_utils::normalizeConfig(config_);
+    config_utils::normalizeConfig(config_);
     reset();
 }
 
 void HoverThrustEstimatorRuntime::setConfig(const Config& config) {
-    config_ = config_utils::normalizeConfig(config);
+    config_ = config;
+    config_utils::normalizeConfig(config_);
     reset();
 }
 

@@ -14,6 +14,9 @@
     <arg name="filter_enabled" default="true"/>
     <arg name="filter_cutoff_hz" default="2.0"/>
     <arg name="input_rate_low_hz" default="5.0"/>
+    <arg name="imu_topic" default="mavros/imu/data"/>
+    <arg name="target_attitude_topic" default="mavros/setpoint_raw/target_attitude"/>
+    <arg name="altitude_topic" default="mavros/local_position/pose"/>
     <arg name="estimate_state_topic" default="hover_thrust/estimate_state"/>
 
     <group ns="$(arg ns)">
@@ -34,6 +37,9 @@
             <param name="filter_enabled" value="$(arg filter_enabled)"/>
             <param name="filter_cutoff_hz" value="$(arg filter_cutoff_hz)"/>
             <param name="input_rate_low_hz" value="$(arg input_rate_low_hz)"/>
+            <param name="imu_topic" value="$(arg imu_topic)"/>
+            <param name="target_attitude_topic" value="$(arg target_attitude_topic)"/>
+            <param name="altitude_topic" value="$(arg altitude_topic)"/>
             <param name="estimate_state_topic" value="$(arg estimate_state_topic)"/>
         </node>
     </group>

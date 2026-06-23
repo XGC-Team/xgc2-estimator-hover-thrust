@@ -40,19 +40,8 @@ class HoverThrustEstimatorNode {
     std::string altitude_topic_{"mavros/local_position/pose"};
     std::string estimate_state_topic_{"hover_thrust/estimate_state"};
 
-    double gravity_{9.8066};
-    double initial_hover_thrust_{0.3};
-    double rho2_{0.998};
-    double min_hover_thrust_{0.15};
-    double max_hover_thrust_{0.85};
-    double min_altitude_{0.5};
-    double sample_timeout_{0.2};
     double loop_rate_{1000.0};
-    double publish_rate_{100.0};
-    double raw_update_rate_{10.0};
-    bool filter_enabled_{true};
-    double filter_cutoff_hz_{2.0};
-    double input_rate_low_hz_{5.0};
+    HoverThrustEstimatorConfig estimator_config_{};
 };
 
 }  // namespace hover_thrust_estimator

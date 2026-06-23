@@ -17,6 +17,8 @@ constexpr double kDefaultFilterCutoffHz = 2.0;
 constexpr double kDefaultInputRateLowHz = 5.0;
 constexpr double kDefaultPublishRateHz = 100.0;
 constexpr double kDefaultRawUpdateRateHz = 10.0;
+constexpr double kDefaultLoopRateHz = 1000.0;
+constexpr double kMaxLoopRateHz = 5000.0;
 
 inline bool finitePositive(double value) {
     return std::isfinite(value) && value > 0.0;
@@ -26,7 +28,7 @@ inline double finiteOrDefault(double value, double fallback) {
     return std::isfinite(value) ? value : fallback;
 }
 
-inline HoverThrustEstimatorConfig normalizeConfig(HoverThrustEstimatorConfig config) {
+inline void normalizeConfig(HoverThrustEstimatorConfig& config) {
     config.gravity =
         finitePositive(config.gravity) ? config.gravity : estimator_limits::kDefaultGravity;
     config.min_hover_thrust =
@@ -60,7 +62,18 @@ inline HoverThrustEstimatorConfig normalizeConfig(HoverThrustEstimatorConfig con
     if (!std::isfinite(config.raw_update_rate_hz) || config.raw_update_rate_hz <= 0.0) {
         config.raw_update_rate_hz = kDefaultRawUpdateRateHz;
     }
-    return config;
+}
+
+inline void normalizeLoopAndEstimatorRates(double& loop_rate_hz,
+                                           HoverThrustEstimatorConfig& estimator_config) {
+    normalizeConfig(estimator_config);
+    if (!std::isfinite(loop_rate_hz) || loop_rate_hz <= 0.0) {
+        loop_rate_hz = kDefaultLoopRateHz;
+    }
+    loop_rate_hz = std::min(loop_rate_hz, kMaxLoopRateHz);
+    estimator_config.publish_rate_hz = std::min(estimator_config.publish_rate_hz, loop_rate_hz);
+    estimator_config.raw_update_rate_hz =
+        std::min(estimator_config.raw_update_rate_hz, loop_rate_hz);
 }
 
 }  // namespace hover_thrust_estimator::config_utils
