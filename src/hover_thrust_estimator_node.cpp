@@ -13,9 +13,12 @@ constexpr double kDefaultMinHoverThrust = 0.05;
 constexpr double kDefaultMaxHoverThrust = 0.95;
 constexpr double kDefaultMinAltitude = 0.5;
 constexpr double kDefaultSampleTimeout = 0.2;
-constexpr double kDefaultPublishRate = 10.0;
+constexpr double kDefaultPublishRate = 100.0;
+constexpr double kDefaultRawUpdateRate = 10.0;
 constexpr double kDefaultFilterCutoffHz = 2.0;
 constexpr double kMaxPublishRate = 1000.0;
+constexpr double kDefaultOutputSlewRate = 0.1;
+constexpr double kDefaultInputRateLowHz = 5.0;
 
 double finiteOrDefault(double value, double fallback) {
     return std::isfinite(value) ? value : fallback;
@@ -33,7 +36,8 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
 
     runtime_.setConfig(HoverThrustEstimatorRuntime::Config{
         gravity_, initial_hover_thrust_, rho2_, min_hover_thrust_, max_hover_thrust_, min_altitude_,
-        sample_timeout_, filter_enabled_, filter_cutoff_hz_});
+        sample_timeout_, filter_enabled_, filter_cutoff_hz_, output_slew_rate_,
+        input_rate_low_hz_});
 
     estimate_state_pub_ =
         nh_.advertise<hover_thrust_estimator::HoverThrustEstimate>(estimate_state_topic_, 10, true);
@@ -45,17 +49,19 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
                                          &HoverThrustEstimatorNode::targetAttitudeCallback, this);
     pose_sub_ = nh_.subscribe(altitude_topic_, 10, &HoverThrustEstimatorNode::poseCallback, this);
 
-    update_timer_ = nh_.createTimer(ros::Duration(1.0 / publish_rate_),
-                                    &HoverThrustEstimatorNode::updateCallback, this);
+    publish_timer_ = nh_.createTimer(ros::Duration(1.0 / publish_rate_),
+                                     &HoverThrustEstimatorNode::publishTimerCallback, this);
+    raw_update_timer_ = nh_.createTimer(ros::Duration(1.0 / raw_update_rate_),
+                                        &HoverThrustEstimatorNode::rawUpdateTimerCallback, this);
 
     const ros::Time startup_stamp = ros::Time::now();
-    publishOutput(runtime_.output(), startup_stamp);
+    publishOutput(runtime_.output(startup_stamp.toSec()), startup_stamp);
 
     ROS_INFO(
         "[HoverThrustEstimatorNode] Initialized: imu=%s target_attitude=%s pose=%s state=%s "
-        "estimate=%s",
+        "estimate=%s publish_rate=%.1f raw_update_rate=%.1f",
         imu_topic_.c_str(), target_attitude_topic_.c_str(), altitude_topic_.c_str(),
-        estimate_state_topic_.c_str(), estimate_topic_.c_str());
+        estimate_state_topic_.c_str(), estimate_topic_.c_str(), publish_rate_, raw_update_rate_);
 }
 
 void HoverThrustEstimatorNode::loadParams() {
@@ -74,8 +80,11 @@ void HoverThrustEstimatorNode::loadParams() {
     private_nh_.param("min_altitude", min_altitude_, min_altitude_);
     private_nh_.param("sample_timeout", sample_timeout_, sample_timeout_);
     private_nh_.param("publish_rate", publish_rate_, publish_rate_);
+    private_nh_.param("raw_update_rate", raw_update_rate_, raw_update_rate_);
     private_nh_.param("filter_enabled", filter_enabled_, filter_enabled_);
     private_nh_.param("filter_cutoff_hz", filter_cutoff_hz_, filter_cutoff_hz_);
+    private_nh_.param("output_slew_rate", output_slew_rate_, output_slew_rate_);
+    private_nh_.param("input_rate_low_hz", input_rate_low_hz_, input_rate_low_hz_);
 
     gravity_ = finiteOrDefault(gravity_, kDefaultGravity);
     if (gravity_ <= estimator_limits::kMinimumGravity) {
@@ -101,11 +110,21 @@ void HoverThrustEstimatorNode::loadParams() {
         publish_rate_ = kDefaultPublishRate;
     }
     publish_rate_ = std::min(publish_rate_, kMaxPublishRate);
+    if (!std::isfinite(raw_update_rate_) || raw_update_rate_ <= 0.0) {
+        raw_update_rate_ = kDefaultRawUpdateRate;
+    }
+    raw_update_rate_ = std::min(raw_update_rate_, kMaxPublishRate);
     if (!std::isfinite(filter_cutoff_hz_)) {
         filter_cutoff_hz_ = kDefaultFilterCutoffHz;
     }
     if (filter_cutoff_hz_ <= 0.0) {
         filter_enabled_ = false;
+    }
+    if (!std::isfinite(output_slew_rate_) || output_slew_rate_ < 0.0) {
+        output_slew_rate_ = kDefaultOutputSlewRate;
+    }
+    if (!std::isfinite(input_rate_low_hz_) || input_rate_low_hz_ < 0.0) {
+        input_rate_low_hz_ = kDefaultInputRateLowHz;
     }
 }
 
@@ -114,9 +133,12 @@ void HoverThrustEstimatorNode::imuCallback(const sensor_msgs::Imu::ConstPtr& msg
         return;
     }
     runtime_input_.imu_acc_z.value = msg->linear_acceleration.z;
-    runtime_input_.imu_acc_z.stamp_sec = messageStampOrNow(msg->header.stamp).toSec();
+    const double stamp_sec = messageStampOrNow(msg->header.stamp).toSec();
+    updateSamplePeriod(runtime_input_.imu_acc_z, stamp_sec);
+    runtime_input_.imu_acc_z.stamp_sec = stamp_sec;
     runtime_input_.imu_acc_z.received = true;
     runtime_input_.imu_acc_z.finite = std::isfinite(msg->linear_acceleration.z);
+    postInputEvent(HoverThrustInputEvent::kImuUpdated);
 }
 
 void HoverThrustEstimatorNode::targetAttitudeCallback(
@@ -128,9 +150,12 @@ void HoverThrustEstimatorNode::targetAttitudeCallback(
     runtime_input_.thrust_ignored =
         (msg->type_mask & mavros_msgs::AttitudeTarget::IGNORE_THRUST) != 0;
     runtime_input_.normalized_thrust.value = msg->thrust;
-    runtime_input_.normalized_thrust.stamp_sec = messageStampOrNow(msg->header.stamp).toSec();
+    const double stamp_sec = messageStampOrNow(msg->header.stamp).toSec();
+    updateSamplePeriod(runtime_input_.normalized_thrust, stamp_sec);
+    runtime_input_.normalized_thrust.stamp_sec = stamp_sec;
     runtime_input_.normalized_thrust.received = true;
     runtime_input_.normalized_thrust.finite = std::isfinite(msg->thrust);
+    postInputEvent(HoverThrustInputEvent::kThrustUpdated);
 }
 
 void HoverThrustEstimatorNode::poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
@@ -138,15 +163,22 @@ void HoverThrustEstimatorNode::poseCallback(const geometry_msgs::PoseStamped::Co
         return;
     }
     runtime_input_.altitude.value = msg->pose.position.z;
-    runtime_input_.altitude.stamp_sec = messageStampOrNow(msg->header.stamp).toSec();
+    const double stamp_sec = messageStampOrNow(msg->header.stamp).toSec();
+    updateSamplePeriod(runtime_input_.altitude, stamp_sec);
+    runtime_input_.altitude.stamp_sec = stamp_sec;
     runtime_input_.altitude.received = true;
     runtime_input_.altitude.finite = std::isfinite(msg->pose.position.z);
+    postInputEvent(HoverThrustInputEvent::kAltitudeUpdated);
 }
 
-void HoverThrustEstimatorNode::updateCallback(const ros::TimerEvent& event) {
-    const ros::Time now = event.current_real.isZero() ? ros::Time::now() : event.current_real;
-    runtime_input_.now_sec = now.toSec();
-    publishOutput(runtime_.update(runtime_input_), now);
+void HoverThrustEstimatorNode::publishTimerCallback(const ros::TimerEvent&) {
+    const ros::Time now = ros::Time::now();
+    publishOutput(runtime_.update(HoverThrustOutputEvent::kPublishEstimate, now.toSec()), now);
+}
+
+void HoverThrustEstimatorNode::rawUpdateTimerCallback(const ros::TimerEvent&) {
+    const ros::Time now = ros::Time::now();
+    publishOutput(runtime_.update(HoverThrustOutputEvent::kUpdateRawEstimate, now.toSec()), now);
 }
 
 void HoverThrustEstimatorNode::publishOutput(const HoverThrustEstimatorRuntime::Output& output,
@@ -155,15 +187,8 @@ void HoverThrustEstimatorNode::publishOutput(const HoverThrustEstimatorRuntime::
     msg.header.stamp = stamp;
     msg.state = static_cast<uint8_t>(output.state);
     msg.flags = output.flags;
-    msg.state_name = output.state_name;
     msg.hover_thrust = output.hover_thrust;
-    msg.raw_hover_thrust = output.raw_hover_thrust;
-    msg.initial_hover_thrust = output.initial_hover_thrust;
-    msg.thrust_to_acceleration = output.thrust_to_acceleration;
-    msg.estimator_valid = output.estimator_valid;
-    msg.sample_used = output.sample_used;
-    msg.source_stamp = output.source_stamp_sec;
-    msg.last_estimate_stamp = output.last_estimate_stamp_sec;
+    msg.estimate_valid = output.estimate_valid;
     estimate_state_pub_.publish(msg);
 
     publishEstimate(output.hover_thrust);
@@ -180,6 +205,18 @@ void HoverThrustEstimatorNode::publishValid(bool valid) {
     std_msgs::Bool msg;
     msg.data = valid;
     valid_pub_.publish(msg);
+}
+
+void HoverThrustEstimatorNode::postInputEvent(HoverThrustInputEvent event) {
+    runtime_.postInputEvent(event, runtime_input_);
+}
+
+void HoverThrustEstimatorNode::updateSamplePeriod(HoverThrustEstimatorRuntime::Sample& sample,
+                                                  double stamp_sec) {
+    sample.period_sec =
+        sample.received && std::isfinite(sample.stamp_sec) && std::isfinite(stamp_sec)
+            ? stamp_sec - sample.stamp_sec
+            : 0.0;
 }
 
 }  // namespace hover_thrust_estimator

@@ -24,11 +24,14 @@ class HoverThrustEstimatorNode {
     void imuCallback(const sensor_msgs::Imu::ConstPtr& msg);
     void targetAttitudeCallback(const mavros_msgs::AttitudeTarget::ConstPtr& msg);
     void poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
-    void updateCallback(const ros::TimerEvent& event);
+    void publishTimerCallback(const ros::TimerEvent& event);
+    void rawUpdateTimerCallback(const ros::TimerEvent& event);
 
     void publishOutput(const HoverThrustEstimatorRuntime::Output& output, const ros::Time& stamp);
     void publishEstimate(double hover_thrust);
     void publishValid(bool valid);
+    void postInputEvent(HoverThrustInputEvent event);
+    static void updateSamplePeriod(HoverThrustEstimatorRuntime::Sample& sample, double stamp_sec);
 
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
@@ -39,7 +42,8 @@ class HoverThrustEstimatorNode {
     ros::Publisher estimate_state_pub_;
     ros::Publisher estimate_pub_;
     ros::Publisher valid_pub_;
-    ros::Timer update_timer_;
+    ros::Timer publish_timer_;
+    ros::Timer raw_update_timer_;
 
     HoverThrustEstimatorRuntime runtime_;
     HoverThrustEstimatorRuntime::Input runtime_input_;
@@ -58,9 +62,12 @@ class HoverThrustEstimatorNode {
     double max_hover_thrust_{0.95};
     double min_altitude_{0.5};
     double sample_timeout_{0.2};
-    double publish_rate_{10.0};
+    double publish_rate_{100.0};
+    double raw_update_rate_{10.0};
     bool filter_enabled_{false};
     double filter_cutoff_hz_{2.0};
+    double output_slew_rate_{0.1};
+    double input_rate_low_hz_{5.0};
 };
 
 }  // namespace hover_thrust_estimator
