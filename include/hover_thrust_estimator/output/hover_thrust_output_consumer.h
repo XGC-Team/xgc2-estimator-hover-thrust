@@ -6,11 +6,13 @@
 
 #include <string>
 
-#include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
+#include "hover_thrust_estimator/common/types.h"
 #include "hover_thrust_estimator/output/output_event_consumer.h"
 #include "hover_thrust_estimator/output/ros_output_runtime.h"
 
 namespace hover_thrust_estimator {
+
+class HoverThrustEstimatorRuntime;
 
 class HoverThrustOutputConsumer final : public OutputEventConsumer {
    public:
@@ -23,8 +25,8 @@ class HoverThrustOutputConsumer final : public OutputEventConsumer {
 
    private:
     hover_thrust_estimator::HoverThrustEstimate makeEstimateStateMessage(
-        const HoverThrustEstimatorRuntime::Output& output, const ros::Time& stamp) const;
-    static std_msgs::Float64 makeEstimateMessage(const HoverThrustEstimatorRuntime::Output& output);
+        const HoverThrustOutput& output, const ros::Time& stamp) const;
+    static std_msgs::Float64 makeEstimateMessage(const HoverThrustOutput& output);
 
     RosOutputExecutor& executor_;
     HoverThrustEstimatorRuntime& runtime_;

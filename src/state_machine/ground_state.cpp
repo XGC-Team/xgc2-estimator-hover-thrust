@@ -9,16 +9,16 @@ GroundState::GroundState(HoverThrustEstimatorRuntime& runtime)
     : StateAdapter(state_type::Ground), runtime_(runtime) {}
 
 void GroundState::onEnter() {
-    runtime_.enterState(HoverThrustRuntimeState::kGround);
+    runtime_.enterState(state_type::Ground);
 }
 
 void GroundState::onPerform() {
-    if (runtime_.health().state != HoverThrustRuntimeState::kGround) {
+    if (runtime_.health().state != state_type::Ground) {
         return;
     }
 
-    runtime_.holdCurrentOutput();
-    runtime_.publishForState(HoverThrustRuntimeState::kGround, runtime_.health().flags, false);
+    runtime_.outputModel().hold(runtime_.currentTime());
+    runtime_.publishForState(state_type::Ground, runtime_.health().flags, false);
     if (runtime_.consumePublishRequest()) {
         emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
     }

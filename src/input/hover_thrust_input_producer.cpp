@@ -84,8 +84,7 @@ void HoverThrustInputProducer::postInputEvent(::state_machine::EventId event_id,
     }
 }
 
-void HoverThrustInputProducer::updateSamplePeriod(HoverThrustEstimatorRuntime::Sample& sample,
-                                                  double stamp_sec) {
+void HoverThrustInputProducer::updateSamplePeriod(HoverThrustSample& sample, double stamp_sec) {
     sample.period_sec =
         sample.received && std::isfinite(sample.stamp_sec) && std::isfinite(stamp_sec)
             ? stamp_sec - sample.stamp_sec

@@ -9,17 +9,17 @@ SelfCheckState::SelfCheckState(HoverThrustEstimatorRuntime& runtime)
     : StateAdapter(state_type::SelfCheck), runtime_(runtime) {}
 
 void SelfCheckState::onEnter() {
-    runtime_.enterState(HoverThrustRuntimeState::kSelfCheck);
+    runtime_.enterState(state_type::SelfCheck);
 }
 
 void SelfCheckState::onPerform() {
-    if (runtime_.health().state != HoverThrustRuntimeState::kSelfCheck) {
+    if (runtime_.health().state != state_type::SelfCheck) {
         return;
     }
 
-    runtime_.setTargetHoverThrust(runtime_.config().initial_hover_thrust);
-    runtime_.driveOutputToward(runtime_.targetHoverThrust());
-    runtime_.publishForState(HoverThrustRuntimeState::kSelfCheck, runtime_.health().flags, false);
+    runtime_.outputModel().setTarget(runtime_.config().initial_hover_thrust);
+    runtime_.outputModel().driveTowardTarget(runtime_.currentTime());
+    runtime_.publishForState(state_type::SelfCheck, runtime_.health().flags, false);
     if (runtime_.consumePublishRequest()) {
         emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
     }

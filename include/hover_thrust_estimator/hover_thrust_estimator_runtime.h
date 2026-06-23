@@ -1,89 +1,22 @@
 #pragma once
 
-#include <cstdint>
 #include <memory>
 #include <state_machine/state_machine.hpp>
 
 #include "hover_thrust_estimator/common/event_types.h"
+#include "hover_thrust_estimator/common/types.h"
 #include "hover_thrust_estimator/hover_thrust_estimator.h"
-#include "xgc2_observer/exponential_filter.hpp"
+#include "hover_thrust_estimator/hover_thrust_output_model.h"
 
 namespace hover_thrust_estimator {
 
-enum class HoverThrustRuntimeState : uint8_t {
-    kSelfCheck = 0,
-    kGround = 1,
-    kAirborne = 2,
-    kFault = 9,
-};
-
-enum HoverThrustRuntimeFlag : uint32_t {
-    kImuMissing = 1u << 0,
-    kThrustMissing = 1u << 1,
-    kAltitudeMissing = 1u << 2,
-    kImuStale = 1u << 3,
-    kThrustStale = 1u << 4,
-    kAltitudeStale = 1u << 5,
-    kImuInvalid = 1u << 6,
-    kThrustInvalid = 1u << 7,
-    kAltitudeInvalid = 1u << 8,
-    kBelowMinAltitude = 1u << 9,
-    kEstimatorRejected = 1u << 10,
-    kStateMachineFault = 1u << 11,
-    kInputRateLow = 1u << 12,
-    kTimeJump = 1u << 13,
-    kGroundHold = 1u << 15,
-    kRawEstimateStale = 1u << 16,
-};
-
-enum class HoverThrustInputEvent : uint8_t {
-    kImuUpdated = 0,
-    kThrustUpdated = 1,
-    kAltitudeUpdated = 2,
-};
-
 class HoverThrustEstimatorRuntime {
    public:
-    struct Config {
-        double gravity{estimator_limits::kDefaultGravity};
-        double initial_hover_thrust{0.3};
-        double rho2{0.998};
-        double min_hover_thrust{0.15};
-        double max_hover_thrust{0.85};
-        double min_altitude{0.5};
-        double sample_timeout{0.2};
-        bool filter_enabled{true};
-        double filter_cutoff_hz{2.0};
-        double input_rate_low_hz{5.0};
-    };
-
-    struct Sample {
-        double value{0.0};
-        double stamp_sec{0.0};
-        double period_sec{0.0};
-        bool received{false};
-        bool finite{false};
-    };
-
-    struct Input {
-        double now_sec{0.0};
-        Sample imu_acc_z;
-        Sample normalized_thrust;
-        Sample altitude;
-        bool thrust_ignored{true};
-    };
-
-    struct Output {
-        HoverThrustRuntimeState state{HoverThrustRuntimeState::kSelfCheck};
-        uint32_t flags{0};
-        double hover_thrust{0.3};
-        double raw_hover_thrust{0.3};
-        double initial_hover_thrust{0.3};
-        double thrust_to_acceleration{estimator_limits::kDefaultGravity / 0.3};
-        bool sample_used{false};
-        double source_stamp_sec{0.0};
-        double last_estimate_stamp_sec{0.0};
-    };
+    using Config = HoverThrustEstimatorConfig;
+    using Sample = HoverThrustSample;
+    using Input = HoverThrustInput;
+    using Output = HoverThrustOutput;
+    using HealthStatus = HoverThrustHealthStatus;
 
     HoverThrustEstimatorRuntime();
     HoverThrustEstimatorRuntime(const HoverThrustEstimatorRuntime&) = delete;
@@ -92,7 +25,6 @@ class HoverThrustEstimatorRuntime {
     void setConfig(const Config& config);
     void reset();
     ::state_machine::Status postInputEvent(::state_machine::Event event, const Input& input);
-    void postInputEvent(HoverThrustInputEvent event, const Input& input);
     void requestRawUpdate(double now_sec);
     void requestPublish(double now_sec);
     Output update(double now_sec);
@@ -107,13 +39,6 @@ class HoverThrustEstimatorRuntime {
         return *machine_;
     }
 
-    struct HealthStatus {
-        HoverThrustRuntimeState state{HoverThrustRuntimeState::kSelfCheck};
-        uint32_t flags{0};
-        bool ready{false};
-        double source_stamp_sec{0.0};
-    };
-
     const Config& config() const {
         return config_;
     }
@@ -126,62 +51,50 @@ class HoverThrustEstimatorRuntime {
     void setHealth(const HealthStatus& health) {
         health_ = health;
     }
-    HoverThrustRuntimeState currentState() const {
+    HoverThrustStateId currentState() const {
         return state_;
     }
     bool faultRequested() const {
         return fault_requested_;
     }
-    void enterState(HoverThrustRuntimeState state);
+    void enterState(HoverThrustStateId state);
     HoverThrustEstimator& estimator() {
         return estimator_;
     }
     const HoverThrustEstimator& estimator() const {
         return estimator_;
     }
+    HoverThrustOutputModel& outputModel() {
+        return output_model_;
+    }
+    const HoverThrustOutputModel& outputModel() const {
+        return output_model_;
+    }
     bool consumeRawUpdateRequest();
     bool consumePublishRequest();
-    double targetHoverThrust() const {
-        return target_hover_thrust_output_;
-    }
-    void setTargetHoverThrust(double hover_thrust) {
-        target_hover_thrust_output_ = hover_thrust;
-    }
-    void setRawHoverThrust(double hover_thrust) {
-        raw_hover_thrust_output_ = hover_thrust;
-    }
     void setLastEstimateStamp(double stamp_sec) {
         last_estimate_stamp_sec_ = stamp_sec;
     }
-    Output publishForState(HoverThrustRuntimeState state, uint32_t flags, bool sample_used);
-    void driveOutputToward(double target_hover_thrust);
-    void holdCurrentOutput();
+    Output publishForState(HoverThrustStateId state, uint32_t flags, bool sample_used);
     double currentTime() const {
         return current_time_sec_;
     }
 
    private:
-    void normalizeConfig();
     void setupMachine();
-    static ::state_machine::Event inputEvent(HoverThrustInputEvent event, double timestamp);
-    void applyInputEvent(::state_machine::EventId event_id, const Input& input);
-    Output makeOutput(HoverThrustRuntimeState state, uint32_t flags, bool sample_used,
-                      const HealthStatus& health, double output_stamp_sec) const;
-    double outputDeltaTime() const;
+    void applyInputEvent(const Input& input);
+    Output makeOutput(HoverThrustStateId state, uint32_t flags, bool sample_used,
+                      const HealthStatus& health) const;
 
     Config config_{};
     HoverThrustEstimator estimator_{};
     std::unique_ptr<state_machine::StateMachine> machine_;
-    HoverThrustRuntimeState state_{HoverThrustRuntimeState::kSelfCheck};
+    HoverThrustStateId state_{state_type::SelfCheck};
     uint32_t flags_{0};
     Input input_{};
     HealthStatus health_{};
-    xgc2_observer::ExponentialLowPass output_filter_{};
-    double target_hover_thrust_output_{0.3};
-    double hover_thrust_output_{0.3};
-    double raw_hover_thrust_output_{0.3};
+    HoverThrustOutputModel output_model_{};
     double current_time_sec_{0.0};
-    double last_output_update_stamp_sec_{0.0};
     double last_estimate_stamp_sec_{0.0};
     bool raw_update_requested_{false};
     bool publish_requested_{false};

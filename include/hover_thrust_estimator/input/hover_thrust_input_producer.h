@@ -9,14 +9,14 @@
 #include <state_machine/state_machine.hpp>
 #include <string>
 
-#include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
+#include "hover_thrust_estimator/common/types.h"
 
 namespace hover_thrust_estimator {
 
 class HoverThrustInputProducer {
    public:
-    using EventSink = std::function<::state_machine::Status(
-        ::state_machine::Event, const HoverThrustEstimatorRuntime::Input&)>;
+    using EventSink =
+        std::function<::state_machine::Status(::state_machine::Event, const HoverThrustInput&)>;
 
     HoverThrustInputProducer(ros::NodeHandle& nh, std::string imu_topic,
                              std::string target_attitude_topic, std::string altitude_topic,
@@ -28,11 +28,11 @@ class HoverThrustInputProducer {
     void poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
     void postInputEvent(::state_machine::EventId event_id, const char* source,
                         double timestamp_sec);
-    static void updateSamplePeriod(HoverThrustEstimatorRuntime::Sample& sample, double stamp_sec);
+    static void updateSamplePeriod(HoverThrustSample& sample, double stamp_sec);
     static ros::Time messageStampOrNow(const ros::Time& stamp);
 
     EventSink event_sink_;
-    HoverThrustEstimatorRuntime::Input runtime_input_;
+    HoverThrustInput runtime_input_;
     ros::Subscriber imu_sub_;
     ros::Subscriber target_attitude_sub_;
     ros::Subscriber pose_sub_;

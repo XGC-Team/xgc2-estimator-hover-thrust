@@ -9,11 +9,11 @@ AirborneState::AirborneState(HoverThrustEstimatorRuntime& runtime)
     : StateAdapter(state_type::Airborne), runtime_(runtime) {}
 
 void AirborneState::onEnter() {
-    runtime_.enterState(HoverThrustRuntimeState::kAirborne);
+    runtime_.enterState(state_type::Airborne);
 }
 
 void AirborneState::onPerform() {
-    if (runtime_.health().state != HoverThrustRuntimeState::kAirborne) {
+    if (runtime_.health().state != state_type::Airborne) {
         return;
     }
 
@@ -27,8 +27,8 @@ void AirborneState::onPerform() {
                 runtime_.estimator().update(input.imu_acc_z.value, input.normalized_thrust.value,
                                             input.normalized_thrust.stamp_sec);
             if (sample_used) {
-                runtime_.setRawHoverThrust(runtime_.estimator().rawEstimate());
-                runtime_.setTargetHoverThrust(runtime_.estimator().rawEstimate());
+                runtime_.outputModel().setRaw(runtime_.estimator().rawEstimate());
+                runtime_.outputModel().setTarget(runtime_.estimator().rawEstimate());
                 runtime_.setLastEstimateStamp(input.normalized_thrust.stamp_sec);
             } else {
                 flags |= HoverThrustRuntimeFlag::kEstimatorRejected;
@@ -38,8 +38,8 @@ void AirborneState::onPerform() {
         }
     }
 
-    runtime_.driveOutputToward(runtime_.targetHoverThrust());
-    runtime_.publishForState(HoverThrustRuntimeState::kAirborne, flags, sample_used);
+    runtime_.outputModel().driveTowardTarget(runtime_.currentTime());
+    runtime_.publishForState(state_type::Airborne, flags, sample_used);
     if (runtime_.consumePublishRequest()) {
         emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
     }

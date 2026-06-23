@@ -4,12 +4,28 @@
 #include <utility>
 
 #include "hover_thrust_estimator/common/event_types.h"
+#include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
 
 namespace hover_thrust_estimator {
 namespace {
 
 ros::Time eventStampOrNow(const ::state_machine::Event& event) {
     return event.timestamp > 0.0 ? ros::Time(event.timestamp) : ros::Time::now();
+}
+
+uint8_t toMessageState(::state_machine::StateId state) {
+    switch (state) {
+        case state_type::SelfCheck:
+            return hover_thrust_estimator::HoverThrustEstimate::STATE_SELF_CHECK;
+        case state_type::Ground:
+            return hover_thrust_estimator::HoverThrustEstimate::STATE_GROUND;
+        case state_type::Airborne:
+            return hover_thrust_estimator::HoverThrustEstimate::STATE_AIRBORNE;
+        case state_type::Fault:
+            return hover_thrust_estimator::HoverThrustEstimate::STATE_FAULT;
+        default:
+            return hover_thrust_estimator::HoverThrustEstimate::STATE_FAULT;
+    }
 }
 
 std::unique_ptr<RosOutputTask> makePublishTask(
@@ -42,7 +58,7 @@ bool HoverThrustOutputConsumer::handle(const ::state_machine::Event& event) {
         return false;
     }
 
-    const HoverThrustEstimatorRuntime::Output output = runtime_.snapshotOutput();
+    const HoverThrustOutput output = runtime_.snapshotOutput();
     const ros::Time stamp = eventStampOrNow(event);
     executor_.pushTask(makePublishTask("PublishHoverThrustEstimate", estimate_state_pub_,
                                        estimate_pub_, makeEstimateStateMessage(output, stamp),
@@ -51,17 +67,16 @@ bool HoverThrustOutputConsumer::handle(const ::state_machine::Event& event) {
 }
 
 hover_thrust_estimator::HoverThrustEstimate HoverThrustOutputConsumer::makeEstimateStateMessage(
-    const HoverThrustEstimatorRuntime::Output& output, const ros::Time& stamp) const {
+    const HoverThrustOutput& output, const ros::Time& stamp) const {
     hover_thrust_estimator::HoverThrustEstimate msg;
     msg.header.stamp = stamp;
-    msg.state = static_cast<uint8_t>(output.state);
+    msg.state = toMessageState(output.state);
     msg.flags = output.flags;
     msg.hover_thrust = output.hover_thrust;
     return msg;
 }
 
-std_msgs::Float64 HoverThrustOutputConsumer::makeEstimateMessage(
-    const HoverThrustEstimatorRuntime::Output& output) {
+std_msgs::Float64 HoverThrustOutputConsumer::makeEstimateMessage(const HoverThrustOutput& output) {
     std_msgs::Float64 msg;
     msg.data = output.hover_thrust;
     return msg;

@@ -9,12 +9,12 @@ FaultState::FaultState(HoverThrustEstimatorRuntime& runtime)
     : StateAdapter(state_type::Fault), runtime_(runtime) {}
 
 void FaultState::onEnter() {
-    runtime_.enterState(HoverThrustRuntimeState::kFault);
+    runtime_.enterState(state_type::Fault);
 }
 
 void FaultState::onPerform() {
     (void)runtime_.consumeRawUpdateRequest();
-    runtime_.publishForState(HoverThrustRuntimeState::kFault,
+    runtime_.publishForState(state_type::Fault,
                              runtime_.health().flags | HoverThrustRuntimeFlag::kStateMachineFault,
                              false);
     if (runtime_.consumePublishRequest()) {

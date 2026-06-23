@@ -7,27 +7,16 @@
 #include <memory>
 #include <utility>
 
+#include "hover_thrust_estimator/common/config_utils.h"
+
 namespace hover_thrust_estimator {
 namespace {
 
-constexpr double kDefaultGravity = estimator_limits::kDefaultGravity;
-constexpr double kDefaultInitialHoverThrust = 0.3;
-constexpr double kDefaultRho2 = 0.998;
-constexpr double kDefaultMinHoverThrust = 0.15;
-constexpr double kDefaultMaxHoverThrust = 0.85;
-constexpr double kDefaultMinAltitude = 0.5;
-constexpr double kDefaultSampleTimeout = 0.2;
 constexpr double kDefaultLoopRate = 1000.0;
 constexpr double kDefaultPublishRate = 100.0;
 constexpr double kDefaultRawUpdateRate = 10.0;
-constexpr double kDefaultFilterCutoffHz = 2.0;
 constexpr double kMaxLoopRate = 5000.0;
-constexpr double kDefaultInputRateLowHz = 5.0;
 constexpr uint32_t kRosQueueSize = 10;
-
-double finiteOrDefault(double value, double fallback) {
-    return std::isfinite(value) ? value : fallback;
-}
 
 bool timerDue(double now_sec, double last_update_sec, bool initialized, double period_sec) {
     if (!std::isfinite(now_sec)) {
@@ -56,8 +45,7 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
         nh_, output_event_executor_, runtime_, estimate_state_topic_, estimate_topic_,
         kRosQueueSize));
 
-    auto post_input_event = [this](::state_machine::Event event,
-                                   const HoverThrustEstimatorRuntime::Input& input) {
+    auto post_input_event = [this](::state_machine::Event event, const HoverThrustInput& input) {
         return runtime_.postInputEvent(std::move(event), input);
     };
 
@@ -150,26 +138,20 @@ void HoverThrustEstimatorNode::loadParams() {
     ros1_utils::getParamWithLog(private_nh_, "input_rate_low_hz", input_rate_low_hz_,
                                 "Minimum healthy input rate");
 
-    gravity_ = finiteOrDefault(gravity_, kDefaultGravity);
-    if (gravity_ <= estimator_limits::kMinimumGravity) {
-        gravity_ = kDefaultGravity;
-    }
-    min_hover_thrust_ = std::clamp(finiteOrDefault(min_hover_thrust_, kDefaultMinHoverThrust), 0.0,
-                                   estimator_limits::kMaximumNormalizedThrust);
-    max_hover_thrust_ = std::clamp(finiteOrDefault(max_hover_thrust_, kDefaultMaxHoverThrust),
-                                   min_hover_thrust_, estimator_limits::kMaximumNormalizedThrust);
-    initial_hover_thrust_ =
-        std::clamp(finiteOrDefault(initial_hover_thrust_, kDefaultInitialHoverThrust),
-                   min_hover_thrust_, max_hover_thrust_);
-    if (!std::isfinite(rho2_) || rho2_ <= 0.0 || rho2_ > 1.0) {
-        rho2_ = kDefaultRho2;
-    }
-    if (!std::isfinite(min_altitude_)) {
-        min_altitude_ = kDefaultMinAltitude;
-    }
-    if (!std::isfinite(sample_timeout_) || sample_timeout_ <= 0.0) {
-        sample_timeout_ = kDefaultSampleTimeout;
-    }
+    const auto estimator_config = config_utils::normalizeConfig(HoverThrustEstimatorConfig{
+        gravity_, initial_hover_thrust_, rho2_, min_hover_thrust_, max_hover_thrust_, min_altitude_,
+        sample_timeout_, filter_enabled_, filter_cutoff_hz_, input_rate_low_hz_});
+    gravity_ = estimator_config.gravity;
+    initial_hover_thrust_ = estimator_config.initial_hover_thrust;
+    rho2_ = estimator_config.rho2;
+    min_hover_thrust_ = estimator_config.min_hover_thrust;
+    max_hover_thrust_ = estimator_config.max_hover_thrust;
+    min_altitude_ = estimator_config.min_altitude;
+    sample_timeout_ = estimator_config.sample_timeout;
+    filter_enabled_ = estimator_config.filter_enabled;
+    filter_cutoff_hz_ = estimator_config.filter_cutoff_hz;
+    input_rate_low_hz_ = estimator_config.input_rate_low_hz;
+
     if (!std::isfinite(loop_rate_) || loop_rate_ <= 0.0) {
         loop_rate_ = kDefaultLoopRate;
     }
@@ -182,15 +164,6 @@ void HoverThrustEstimatorNode::loadParams() {
         raw_update_rate_ = kDefaultRawUpdateRate;
     }
     raw_update_rate_ = std::min(raw_update_rate_, loop_rate_);
-    if (!std::isfinite(filter_cutoff_hz_)) {
-        filter_cutoff_hz_ = kDefaultFilterCutoffHz;
-    }
-    if (filter_cutoff_hz_ <= 0.0) {
-        filter_enabled_ = false;
-    }
-    if (!std::isfinite(input_rate_low_hz_) || input_rate_low_hz_ < 0.0) {
-        input_rate_low_hz_ = kDefaultInputRateLowHz;
-    }
 }
 
 void HoverThrustEstimatorNode::dispatchOutputEvents(
