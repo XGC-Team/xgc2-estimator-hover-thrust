@@ -28,6 +28,20 @@ ros::Time messageStampOrNow(const ros::Time& stamp) {
     return stamp.isZero() ? ros::Time::now() : stamp;
 }
 
+bool rawUpdateDue(double now_sec, double last_update_sec, bool initialized,
+                  double update_period_sec) {
+    if (!std::isfinite(now_sec)) {
+        return false;
+    }
+    if (!initialized) {
+        return true;
+    }
+    if (now_sec + 0.05 < last_update_sec) {
+        return true;
+    }
+    return now_sec - last_update_sec >= update_period_sec;
+}
+
 }  // namespace
 
 HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
@@ -49,11 +63,6 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
                                          &HoverThrustEstimatorNode::targetAttitudeCallback, this);
     pose_sub_ = nh_.subscribe(altitude_topic_, 10, &HoverThrustEstimatorNode::poseCallback, this);
 
-    publish_timer_ = nh_.createTimer(ros::Duration(1.0 / publish_rate_),
-                                     &HoverThrustEstimatorNode::publishTimerCallback, this);
-    raw_update_timer_ = nh_.createTimer(ros::Duration(1.0 / raw_update_rate_),
-                                        &HoverThrustEstimatorNode::rawUpdateTimerCallback, this);
-
     const ros::Time startup_stamp = ros::Time::now();
     publishOutput(runtime_.output(startup_stamp.toSec()), startup_stamp);
 
@@ -62,6 +71,35 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
         "estimate=%s publish_rate=%.1f raw_update_rate=%.1f",
         imu_topic_.c_str(), target_attitude_topic_.c_str(), altitude_topic_.c_str(),
         estimate_state_topic_.c_str(), estimate_topic_.c_str(), publish_rate_, raw_update_rate_);
+}
+
+void HoverThrustEstimatorNode::run(double frequency) {
+    const double loop_frequency =
+        std::isfinite(frequency) && frequency > 0.0 ? frequency : publish_rate_;
+    const double raw_update_period = 1.0 / raw_update_rate_;
+    bool raw_update_initialized = false;
+    double last_raw_update_sec = 0.0;
+
+    ROS_INFO("[HoverThrustEstimatorNode] Starting estimator loop at %.1f Hz", loop_frequency);
+
+    ros::Rate rate(loop_frequency);
+    while (ros::ok()) {
+        ros::spinOnce();
+
+        const ros::Time now = ros::Time::now();
+        const double now_sec = now.toSec();
+
+        if (rawUpdateDue(now_sec, last_raw_update_sec, raw_update_initialized, raw_update_period)) {
+            consumeOutputEvent(HoverThrustOutputEvent::kUpdateRawEstimate, now);
+            last_raw_update_sec = now_sec;
+            raw_update_initialized = true;
+        }
+
+        consumeOutputEvent(HoverThrustOutputEvent::kPublishEstimate, now);
+        rate.sleep();
+    }
+
+    ROS_INFO("[HoverThrustEstimatorNode] Estimator loop exited");
 }
 
 void HoverThrustEstimatorNode::loadParams() {
@@ -171,16 +209,6 @@ void HoverThrustEstimatorNode::poseCallback(const geometry_msgs::PoseStamped::Co
     postInputEvent(HoverThrustInputEvent::kAltitudeUpdated);
 }
 
-void HoverThrustEstimatorNode::publishTimerCallback(const ros::TimerEvent&) {
-    const ros::Time now = ros::Time::now();
-    publishOutput(runtime_.update(HoverThrustOutputEvent::kPublishEstimate, now.toSec()), now);
-}
-
-void HoverThrustEstimatorNode::rawUpdateTimerCallback(const ros::TimerEvent&) {
-    const ros::Time now = ros::Time::now();
-    publishOutput(runtime_.update(HoverThrustOutputEvent::kUpdateRawEstimate, now.toSec()), now);
-}
-
 void HoverThrustEstimatorNode::publishOutput(const HoverThrustEstimatorRuntime::Output& output,
                                              const ros::Time& stamp) {
     hover_thrust_estimator::HoverThrustEstimate msg;
@@ -209,6 +237,14 @@ void HoverThrustEstimatorNode::publishValid(bool valid) {
 
 void HoverThrustEstimatorNode::postInputEvent(HoverThrustInputEvent event) {
     runtime_.postInputEvent(event, runtime_input_);
+}
+
+void HoverThrustEstimatorNode::consumeOutputEvent(HoverThrustOutputEvent event,
+                                                  const ros::Time& stamp) {
+    const HoverThrustEstimatorRuntime::Output output = runtime_.update(event, stamp.toSec());
+    if (event == HoverThrustOutputEvent::kPublishEstimate) {
+        publishOutput(output, stamp);
+    }
 }
 
 void HoverThrustEstimatorNode::updateSamplePeriod(HoverThrustEstimatorRuntime::Sample& sample,
