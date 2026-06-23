@@ -84,6 +84,10 @@ if(CATKIN_ENABLE_TESTING)
       xgc2_state_machine::state_machine
       ${catkin_LIBRARIES}
     )
+    set_target_properties(${PROJECT_NAME}_core_test PROPERTIES
+      BUILD_RPATH "\$ORIGIN/.."
+      LINK_FLAGS "-Wl,--disable-new-dtags"
+    )
   endif()
 endif()
 

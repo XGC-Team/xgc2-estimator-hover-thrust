@@ -1,13 +1,14 @@
 #pragma once
 
+#include <state_machine/state_machine.hpp>
+
 #include "hover_thrust_estimator/common/periodic_gate.h"
-#include "hover_thrust_estimator/state_machine/state_adapter.h"
 
 namespace hover_thrust_estimator {
 
 class HoverThrustEstimatorRuntime;
 
-class SelfCheckState final : public StateAdapter {
+class SelfCheckState final : public ::state_machine::State {
    public:
     explicit SelfCheckState(HoverThrustEstimatorRuntime& runtime);
 
@@ -16,12 +17,12 @@ class SelfCheckState final : public StateAdapter {
     }
 
    protected:
-    void onEnter() override;
-    void onPerform() override;
-    void onExit() override;
+    ::state_machine::ActionResult onEnter(::state_machine::StateContext& ctx) override;
+    ::state_machine::ActionResult onTick(::state_machine::StateContext& ctx) override;
+    ::state_machine::ActionResult onExit(::state_machine::StateContext& ctx) override;
 
    private:
-    void publishEstimateIfDue();
+    void publishEstimateIfDue(::state_machine::StateContext& ctx);
 
     HoverThrustEstimatorRuntime& runtime_;
     PeriodicGate publish_gate_;

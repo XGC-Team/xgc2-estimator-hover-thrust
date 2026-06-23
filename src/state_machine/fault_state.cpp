@@ -5,29 +5,36 @@
 
 namespace hover_thrust_estimator {
 
-FaultState::FaultState(HoverThrustEstimatorRuntime& runtime)
-    : StateAdapter(state_type::Fault), runtime_(runtime) {}
+FaultState::FaultState(HoverThrustEstimatorRuntime& runtime) : runtime_(runtime) {}
 
-void FaultState::onEnter() {
+::state_machine::ActionResult FaultState::onEnter(::state_machine::StateContext& ctx) {
+    (void)ctx;
     runtime_.enterState(state_type::Fault);
     publish_gate_.reset();
+    return {};
 }
 
-void FaultState::onPerform() {
+::state_machine::ActionResult FaultState::onTick(::state_machine::StateContext& ctx) {
     runtime_.recordStateOutput(state_type::Fault,
                                runtime_.health().flags | HoverThrustRuntimeFlag::kStateMachineFault,
                                false);
-    publishEstimateIfDue();
+    publishEstimateIfDue(ctx);
+    return {};
 }
 
-void FaultState::publishEstimateIfDue() {
+void FaultState::publishEstimateIfDue(::state_machine::StateContext& ctx) {
     if (publish_gate_.due(runtime_.currentTime(), 1.0 / runtime_.config().publish_rate_hz)) {
-        emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
+        ::state_machine::Event event(output_event_type::PUBLISH_ESTIMATE,
+                                     ::state_machine::EventTimestamp{runtime_.currentTime()});
+        event.category = ::state_machine::EventCategory::kOutput;
+        ctx.emitOutput(std::move(event));
     }
 }
 
-void FaultState::onExit() {
+::state_machine::ActionResult FaultState::onExit(::state_machine::StateContext& ctx) {
+    (void)ctx;
     publish_gate_.reset();
+    return {};
 }
 
 }  // namespace hover_thrust_estimator

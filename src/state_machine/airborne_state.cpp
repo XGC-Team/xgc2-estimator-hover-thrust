@@ -5,24 +5,26 @@
 
 namespace hover_thrust_estimator {
 
-AirborneState::AirborneState(HoverThrustEstimatorRuntime& runtime)
-    : StateAdapter(state_type::Airborne), runtime_(runtime) {}
+AirborneState::AirborneState(HoverThrustEstimatorRuntime& runtime) : runtime_(runtime) {}
 
-void AirborneState::onEnter() {
+::state_machine::ActionResult AirborneState::onEnter(::state_machine::StateContext& ctx) {
+    (void)ctx;
     runtime_.enterState(state_type::Airborne);
     raw_update_gate_.reset();
     publish_gate_.reset();
+    return {};
 }
 
-void AirborneState::onPerform() {
+::state_machine::ActionResult AirborneState::onTick(::state_machine::StateContext& ctx) {
     if (runtime_.health().state != state_type::Airborne) {
-        return;
+        return {};
     }
 
     uint32_t flags = runtime_.health().flags;
     const bool sample_used = updateRawEstimateIfDue(flags);
     runtime_.recordStateOutput(state_type::Airborne, flags, sample_used);
-    publishEstimateIfDue();
+    publishEstimateIfDue(ctx);
+    return {};
 }
 
 bool AirborneState::updateRawEstimateIfDue(uint32_t& flags) {
@@ -48,15 +50,20 @@ bool AirborneState::updateRawEstimateIfDue(uint32_t& flags) {
     return true;
 }
 
-void AirborneState::publishEstimateIfDue() {
+void AirborneState::publishEstimateIfDue(::state_machine::StateContext& ctx) {
     if (publish_gate_.due(runtime_.currentTime(), 1.0 / runtime_.config().publish_rate_hz)) {
-        emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
+        ::state_machine::Event event(output_event_type::PUBLISH_ESTIMATE,
+                                     ::state_machine::EventTimestamp{runtime_.currentTime()});
+        event.category = ::state_machine::EventCategory::kOutput;
+        ctx.emitOutput(std::move(event));
     }
 }
 
-void AirborneState::onExit() {
+::state_machine::ActionResult AirborneState::onExit(::state_machine::StateContext& ctx) {
+    (void)ctx;
     raw_update_gate_.reset();
     publish_gate_.reset();
+    return {};
 }
 
 }  // namespace hover_thrust_estimator
