@@ -15,6 +15,7 @@ test -f /usr/include/xgc2_observer/recursive_least_squares.hpp
 test -f /usr/include/xgc2_observer/slew_rate_limiter.hpp
 test -f /usr/include/state_machine/state_machine.hpp
 test "$(rospack find hover_thrust_estimator)" = "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator"
+test -f "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator/config/hover_thrust_estimator.yaml"
 test -f "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator/msg/HoverThrustEstimate.msg"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_math.so"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so"
