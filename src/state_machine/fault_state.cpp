@@ -13,7 +13,10 @@ void FaultState::onEnter() {
 }
 
 void FaultState::onPerform() {
-    runtime_.performFault();
+    (void)runtime_.consumeRawUpdateRequest();
+    runtime_.publishForState(HoverThrustRuntimeState::kFault,
+                             runtime_.health().flags | HoverThrustRuntimeFlag::kStateMachineFault,
+                             false);
     if (runtime_.consumePublishRequest()) {
         emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
     }

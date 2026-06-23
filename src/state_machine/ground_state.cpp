@@ -13,7 +13,12 @@ void GroundState::onEnter() {
 }
 
 void GroundState::onPerform() {
-    runtime_.performGround();
+    if (runtime_.health().state != HoverThrustRuntimeState::kGround) {
+        return;
+    }
+
+    runtime_.holdCurrentOutput();
+    runtime_.publishForState(HoverThrustRuntimeState::kGround, runtime_.health().flags, false);
     if (runtime_.consumePublishRequest()) {
         emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
     }

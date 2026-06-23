@@ -107,44 +107,66 @@ class HoverThrustEstimatorRuntime {
         return *machine_;
     }
 
-    void refreshHealth();
-    HoverThrustRuntimeState targetState() const {
-        if (fault_requested_) {
-            return HoverThrustRuntimeState::kFault;
-        }
-        return health_.state;
-    }
-    void enterState(HoverThrustRuntimeState state);
-    void performSelfCheck();
-    void performGround();
-    void performAirborne();
-    void performFault();
-    bool consumePublishRequest();
-    double currentTime() const {
-        return current_time_sec_;
-    }
-
-   private:
-    struct Classification {
+    struct HealthStatus {
         HoverThrustRuntimeState state{HoverThrustRuntimeState::kSelfCheck};
         uint32_t flags{0};
         bool ready{false};
         double source_stamp_sec{0.0};
     };
 
+    const Config& config() const {
+        return config_;
+    }
+    const Input& input() const {
+        return input_;
+    }
+    const HealthStatus& health() const {
+        return health_;
+    }
+    void setHealth(const HealthStatus& health) {
+        health_ = health;
+    }
+    HoverThrustRuntimeState currentState() const {
+        return state_;
+    }
+    bool faultRequested() const {
+        return fault_requested_;
+    }
+    void enterState(HoverThrustRuntimeState state);
+    HoverThrustEstimator& estimator() {
+        return estimator_;
+    }
+    const HoverThrustEstimator& estimator() const {
+        return estimator_;
+    }
+    bool consumeRawUpdateRequest();
+    bool consumePublishRequest();
+    double targetHoverThrust() const {
+        return target_hover_thrust_output_;
+    }
+    void setTargetHoverThrust(double hover_thrust) {
+        target_hover_thrust_output_ = hover_thrust;
+    }
+    void setRawHoverThrust(double hover_thrust) {
+        raw_hover_thrust_output_ = hover_thrust;
+    }
+    void setLastEstimateStamp(double stamp_sec) {
+        last_estimate_stamp_sec_ = stamp_sec;
+    }
+    Output publishForState(HoverThrustRuntimeState state, uint32_t flags, bool sample_used);
+    void driveOutputToward(double target_hover_thrust);
+    void holdCurrentOutput();
+    double currentTime() const {
+        return current_time_sec_;
+    }
+
+   private:
     void normalizeConfig();
     void setupMachine();
     static ::state_machine::Event inputEvent(HoverThrustInputEvent event, double timestamp);
     void applyInputEvent(::state_machine::EventId event_id, const Input& input);
-    Classification classify(double now_sec) const;
-    bool sampleStale(const Sample& sample, double now_sec) const;
-    bool sampleRateLow(const Sample& sample) const;
-    bool sampleTimeJumped(const Sample& sample, double now_sec) const;
-    Output publishForState(HoverThrustRuntimeState state, uint32_t flags, bool sample_used);
     Output makeOutput(HoverThrustRuntimeState state, uint32_t flags, bool sample_used,
-                      const Classification& classification, double output_stamp_sec) const;
-    void driveOutputToward(double target_hover_thrust);
-    void holdCurrentOutput();
+                      const HealthStatus& health, double output_stamp_sec) const;
     double outputDeltaTime() const;
 
     Config config_{};
@@ -153,7 +175,7 @@ class HoverThrustEstimatorRuntime {
     HoverThrustRuntimeState state_{HoverThrustRuntimeState::kSelfCheck};
     uint32_t flags_{0};
     Input input_{};
-    Classification health_{};
+    HealthStatus health_{};
     xgc2_observer::ExponentialLowPass output_filter_{};
     double target_hover_thrust_output_{0.3};
     double hover_thrust_output_{0.3};

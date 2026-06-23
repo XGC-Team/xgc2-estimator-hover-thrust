@@ -13,7 +13,13 @@ void SelfCheckState::onEnter() {
 }
 
 void SelfCheckState::onPerform() {
-    runtime_.performSelfCheck();
+    if (runtime_.health().state != HoverThrustRuntimeState::kSelfCheck) {
+        return;
+    }
+
+    runtime_.setTargetHoverThrust(runtime_.config().initial_hover_thrust);
+    runtime_.driveOutputToward(runtime_.targetHoverThrust());
+    runtime_.publishForState(HoverThrustRuntimeState::kSelfCheck, runtime_.health().flags, false);
     if (runtime_.consumePublishRequest()) {
         emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
     }
