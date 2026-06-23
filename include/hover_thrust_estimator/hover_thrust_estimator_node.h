@@ -39,7 +39,6 @@ class HoverThrustEstimatorNode {
     std::string target_attitude_topic_{"mavros/setpoint_raw/target_attitude"};
     std::string altitude_topic_{"mavros/local_position/pose"};
     std::string estimate_state_topic_{"hover_thrust/estimate_state"};
-    std::string estimate_topic_{"hover_thrust/estimate"};
 
     double gravity_{9.8066};
     double initial_hover_thrust_{0.3};

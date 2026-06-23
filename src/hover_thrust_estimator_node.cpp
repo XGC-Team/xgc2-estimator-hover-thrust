@@ -30,8 +30,7 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
         raw_update_rate_});
 
     output_event_dispatcher_.addConsumer(std::make_unique<HoverThrustOutputConsumer>(
-        nh_, output_event_executor_, runtime_, estimate_state_topic_, estimate_topic_,
-        kRosQueueSize));
+        nh_, output_event_executor_, runtime_, estimate_state_topic_, kRosQueueSize));
 
     auto post_input_event = [this](::state_machine::Event event, const HoverThrustInput& input) {
         return runtime_.postInputEvent(std::move(event), input);
@@ -43,11 +42,10 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
     output_event_executor_.start();
 
     ROS_INFO(
-        "[HoverThrustEstimatorNode] Initialized: imu=%s target_attitude=%s pose=%s state=%s "
-        "estimate=%s loop_rate=%.1f publish_rate=%.1f raw_update_rate=%.1f",
+        "[HoverThrustEstimatorNode] Initialized: imu=%s target_attitude=%s pose=%s estimate=%s "
+        "loop_rate=%.1f publish_rate=%.1f raw_update_rate=%.1f",
         imu_topic_.c_str(), target_attitude_topic_.c_str(), altitude_topic_.c_str(),
-        estimate_state_topic_.c_str(), estimate_topic_.c_str(), loop_rate_, publish_rate_,
-        raw_update_rate_);
+        estimate_state_topic_.c_str(), loop_rate_, publish_rate_, raw_update_rate_);
 }
 
 HoverThrustEstimatorNode::~HoverThrustEstimatorNode() {
@@ -83,8 +81,6 @@ void HoverThrustEstimatorNode::loadParams() {
     ros1_utils::getParamWithLog(private_nh_, "altitude_topic", altitude_topic_, "Altitude topic");
     ros1_utils::getParamWithLog(private_nh_, "estimate_state_topic", estimate_state_topic_,
                                 "Hover thrust estimate state topic");
-    ros1_utils::getParamWithLog(private_nh_, "estimate_topic", estimate_topic_,
-                                "Legacy hover thrust estimate topic");
 
     ros1_utils::getParamWithLog(private_nh_, "gravity", gravity_, "Gravity");
     ros1_utils::getParamWithLog(private_nh_, "initial_hover_thrust", initial_hover_thrust_,

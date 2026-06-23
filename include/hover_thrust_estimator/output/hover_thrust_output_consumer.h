@@ -2,7 +2,6 @@
 
 #include <hover_thrust_estimator/HoverThrustEstimate.h>
 #include <ros/ros.h>
-#include <std_msgs/Float64.h>
 
 #include <string>
 
@@ -18,20 +17,17 @@ class HoverThrustOutputConsumer final : public OutputEventConsumer {
    public:
     HoverThrustOutputConsumer(ros::NodeHandle& nh, RosOutputExecutor& executor,
                               HoverThrustEstimatorRuntime& runtime,
-                              std::string estimate_state_topic, std::string estimate_topic,
-                              uint32_t queue_size);
+                              std::string estimate_state_topic, uint32_t queue_size);
 
     bool handle(const ::state_machine::Event& event) override;
 
    private:
     hover_thrust_estimator::HoverThrustEstimate makeEstimateStateMessage(
         const HoverThrustOutput& output, const ros::Time& stamp) const;
-    static std_msgs::Float64 makeEstimateMessage(const HoverThrustOutput& output);
 
     RosOutputExecutor& executor_;
     HoverThrustEstimatorRuntime& runtime_;
     ros::Publisher estimate_state_pub_;
-    ros::Publisher estimate_pub_;
 };
 
 }  // namespace hover_thrust_estimator
