@@ -20,13 +20,15 @@ HealthMonitorState::HealthMonitorState(HoverThrustEstimatorRuntime& runtime) : r
 
 ::state_machine::ActionResult HealthMonitorState::onEvent(::state_machine::StateContext& ctx,
                                                           const ::state_machine::Event& event) {
+    if (event.category != ::state_machine::EventCategory::kInput) {
+        return {};
+    }
     evaluateAndPostTransition(ctx, eventTimeOrCurrent(event, runtime_));
     return {};
 }
 
-::state_machine::ActionResult HealthMonitorState::onTick(::state_machine::StateContext&) {
-    runtime_.setHealth(health_checks::classify(runtime_.input(), runtime_.config(),
-                                               runtime_.faultRequested(), runtime_.currentTime()));
+::state_machine::ActionResult HealthMonitorState::onTick(::state_machine::StateContext& ctx) {
+    evaluateAndPostTransition(ctx, runtime_.currentTime());
     return {};
 }
 

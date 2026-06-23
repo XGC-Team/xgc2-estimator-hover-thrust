@@ -185,6 +185,48 @@ TEST(HoverThrustEstimatorRuntimeTest, StaleInputHoldsLastSafeEstimate) {
     EXPECT_FALSE(output.sample_used);
 }
 
+TEST(HoverThrustEstimatorRuntimeTest, TickDetectsStaleInputsWithoutNewInputEvents) {
+    HoverThrustEstimatorRuntime runtime;
+    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    runtime.update(1.0);
+    ASSERT_EQ(runtime.output(1.0).state, state_type::Airborne);
+
+    runtime.update(1.21);
+
+    EXPECT_EQ(runtime.currentState(), state_type::SelfCheck);
+    EXPECT_EQ(runtime.health().state, state_type::SelfCheck);
+    EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kImuStale, 0u);
+    EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kThrustStale, 0u);
+    EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kAltitudeStale, 0u);
+
+    const auto output = runtime.update(1.211);
+
+    EXPECT_EQ(output.state, state_type::SelfCheck);
+    EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kImuStale, 0u);
+    EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kThrustStale, 0u);
+    EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kAltitudeStale, 0u);
+    EXPECT_FALSE(output.sample_used);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, TickStaleSelfCheckKeepsPublishingOutputEvents) {
+    HoverThrustEstimatorRuntime runtime;
+    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    runtime.update(1.0);
+    advanceFilterForPublish(runtime, 1.0);
+
+    runtime.update(1.21);
+    EXPECT_EQ(runtime.output(1.21).state, state_type::SelfCheck);
+
+    runtime.update(1.221);
+
+    ASSERT_EQ(runtime.getStateMachine().currentOutputEvents().size(), 1u);
+    EXPECT_EQ(runtime.getStateMachine().currentOutputEvents().front().id,
+              output_event_type::PUBLISH_ESTIMATE);
+    const auto filtered_output = advanceFilterForPublish(runtime, 1.221);
+    EXPECT_EQ(filtered_output.state, state_type::SelfCheck);
+    EXPECT_GT(filtered_output.hover_thrust, 0.3);
+}
+
 TEST(HoverThrustEstimatorRuntimeTest, SelfCheckReturnsToDefaultWithoutOutputJump) {
     HoverThrustEstimatorRuntime runtime;
     postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
