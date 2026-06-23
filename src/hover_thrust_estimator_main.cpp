@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
         ROS_INFO("Publishing hover thrust state on topic: hover_thrust/estimate_state");
         ROS_INFO("========================================");
 
-        node.run(node.publishRate());
+        node.run(node.loopRate());
     } catch (const std::exception& e) {
         ROS_ERROR("Exception in main: %s", e.what());
         return 1;

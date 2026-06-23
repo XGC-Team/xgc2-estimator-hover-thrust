@@ -2,12 +2,13 @@
 <launch>
     <arg name="ns" default="uav1"/>
     <arg name="gravity" default="9.8066"/>
-    <arg name="initial_hover_thrust" default="0.5"/>
+    <arg name="initial_hover_thrust" default="0.3"/>
     <arg name="rho2" default="0.998"/>
-    <arg name="min_hover_thrust" default="0.05"/>
-    <arg name="max_hover_thrust" default="0.95"/>
+    <arg name="min_hover_thrust" default="0.15"/>
+    <arg name="max_hover_thrust" default="0.85"/>
     <arg name="min_altitude" default="0.5"/>
     <arg name="sample_timeout" default="0.2"/>
+    <arg name="loop_rate" default="1000.0"/>
     <arg name="publish_rate" default="100.0"/>
     <arg name="raw_update_rate" default="10.0"/>
     <arg name="filter_enabled" default="true"/>
@@ -27,6 +28,7 @@
             <param name="max_hover_thrust" value="$(arg max_hover_thrust)"/>
             <param name="min_altitude" value="$(arg min_altitude)"/>
             <param name="sample_timeout" value="$(arg sample_timeout)"/>
+            <param name="loop_rate" value="$(arg loop_rate)"/>
             <param name="publish_rate" value="$(arg publish_rate)"/>
             <param name="raw_update_rate" value="$(arg raw_update_rate)"/>
             <param name="filter_enabled" value="$(arg filter_enabled)"/>

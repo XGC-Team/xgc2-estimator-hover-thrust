@@ -46,10 +46,10 @@ class HoverThrustEstimatorRuntime {
    public:
     struct Config {
         double gravity{estimator_limits::kDefaultGravity};
-        double initial_hover_thrust{0.5};
+        double initial_hover_thrust{0.3};
         double rho2{0.998};
-        double min_hover_thrust{0.05};
-        double max_hover_thrust{0.95};
+        double min_hover_thrust{0.15};
+        double max_hover_thrust{0.85};
         double min_altitude{0.5};
         double sample_timeout{0.2};
         bool filter_enabled{true};
@@ -76,10 +76,10 @@ class HoverThrustEstimatorRuntime {
     struct Output {
         HoverThrustRuntimeState state{HoverThrustRuntimeState::kSelfCheck};
         uint32_t flags{0};
-        double hover_thrust{0.5};
-        double raw_hover_thrust{0.5};
-        double initial_hover_thrust{0.5};
-        double thrust_to_acceleration{estimator_limits::kDefaultGravity / 0.5};
+        double hover_thrust{0.3};
+        double raw_hover_thrust{0.3};
+        double initial_hover_thrust{0.3};
+        double thrust_to_acceleration{estimator_limits::kDefaultGravity / 0.3};
         bool sample_used{false};
         double source_stamp_sec{0.0};
         double last_estimate_stamp_sec{0.0};
@@ -94,6 +94,7 @@ class HoverThrustEstimatorRuntime {
     ::state_machine::Status postInputEvent(::state_machine::Event event, const Input& input);
     void postInputEvent(HoverThrustInputEvent event, const Input& input);
     void requestRawUpdate(double now_sec);
+    void requestPublish(double now_sec);
     Output update(double now_sec);
     Output output(double now_sec) const;
     Output snapshotOutput() const {
@@ -118,6 +119,7 @@ class HoverThrustEstimatorRuntime {
     void performGround();
     void performAirborne();
     void performFault();
+    bool consumePublishRequest();
     double currentTime() const {
         return current_time_sec_;
     }
@@ -153,13 +155,14 @@ class HoverThrustEstimatorRuntime {
     Input input_{};
     Classification health_{};
     xgc2_observer::ExponentialLowPass output_filter_{};
-    double target_hover_thrust_output_{0.5};
-    double hover_thrust_output_{0.5};
-    double raw_hover_thrust_output_{0.5};
+    double target_hover_thrust_output_{0.3};
+    double hover_thrust_output_{0.3};
+    double raw_hover_thrust_output_{0.3};
     double current_time_sec_{0.0};
     double last_output_update_stamp_sec_{0.0};
     double last_estimate_stamp_sec_{0.0};
     bool raw_update_requested_{false};
+    bool publish_requested_{false};
     bool fault_requested_{false};
     Output last_output_{};
 };

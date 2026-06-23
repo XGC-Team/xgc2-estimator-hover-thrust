@@ -14,7 +14,9 @@ void GroundState::onEnter() {
 
 void GroundState::onPerform() {
     runtime_.performGround();
-    emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
+    if (runtime_.consumePublishRequest()) {
+        emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
+    }
 }
 
 void GroundState::onExit() {}

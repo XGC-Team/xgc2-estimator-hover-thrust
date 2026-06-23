@@ -19,8 +19,8 @@ class HoverThrustEstimatorNode {
     explicit HoverThrustEstimatorNode(ros::NodeHandle& nh);
     ~HoverThrustEstimatorNode();
     void run(double frequency);
-    double publishRate() const {
-        return publish_rate_;
+    double loopRate() const {
+        return loop_rate_;
     }
 
    private:
@@ -42,12 +42,13 @@ class HoverThrustEstimatorNode {
     std::string estimate_topic_{"hover_thrust/estimate"};
 
     double gravity_{9.8066};
-    double initial_hover_thrust_{0.5};
+    double initial_hover_thrust_{0.3};
     double rho2_{0.998};
-    double min_hover_thrust_{0.05};
-    double max_hover_thrust_{0.95};
+    double min_hover_thrust_{0.15};
+    double max_hover_thrust_{0.85};
     double min_altitude_{0.5};
     double sample_timeout_{0.2};
+    double loop_rate_{1000.0};
     double publish_rate_{100.0};
     double raw_update_rate_{10.0};
     bool filter_enabled_{true};

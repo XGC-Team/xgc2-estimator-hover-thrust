@@ -14,7 +14,9 @@ void AirborneState::onEnter() {
 
 void AirborneState::onPerform() {
     runtime_.performAirborne();
-    emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
+    if (runtime_.consumePublishRequest()) {
+        emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
+    }
 }
 
 void AirborneState::onExit() {}

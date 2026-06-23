@@ -21,7 +21,7 @@ HoverThrustEstimator makeEstimator(bool filter_enabled, double filter_cutoff_hz)
     config.filter_enabled = filter_enabled;
     config.filter_cutoff_hz = filter_cutoff_hz;
     estimator.setConfig(config);
-    estimator.reset(kGravity, 0.5);
+    estimator.reset(kGravity, 0.3);
     return estimator;
 }
 
@@ -86,10 +86,10 @@ TEST(HoverThrustEstimatorTest, RawEstimateIsClampedToConfiguredBounds) {
     HoverThrustEstimator estimator = makeEstimator(false, 0.0);
 
     ASSERT_TRUE(estimator.update(accelerationForHover(2.0, 0.5), 0.5, 1.0));
-    EXPECT_NEAR(estimator.rawEstimate(), 0.95, 1.0e-12);
+    EXPECT_NEAR(estimator.rawEstimate(), 0.85, 1.0e-12);
 
     ASSERT_TRUE(estimator.update(accelerationForHover(0.01, 0.5), 0.5, 1.02));
-    EXPECT_NEAR(estimator.rawEstimate(), 0.05, 1.0e-12);
+    EXPECT_NEAR(estimator.rawEstimate(), 0.15, 1.0e-12);
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, StartupOutputKeepsInitialHoverThrust) {
@@ -98,9 +98,25 @@ TEST(HoverThrustEstimatorRuntimeTest, StartupOutputKeepsInitialHoverThrust) {
     const auto output = runtime.output(0.0);
 
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kSelfCheck);
-    EXPECT_DOUBLE_EQ(output.hover_thrust, 0.5);
+    EXPECT_DOUBLE_EQ(output.hover_thrust, 0.3);
     EXPECT_EQ(output.flags, 0u);
     EXPECT_FALSE(output.sample_used);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, PublishOutputIsDrivenByPublishRequestEvent) {
+    HoverThrustEstimatorRuntime runtime;
+
+    runtime.update(1.0);
+    EXPECT_TRUE(runtime.getStateMachine().currentOutputEvents().empty());
+
+    runtime.requestPublish(1.01);
+    runtime.update(1.01);
+    ASSERT_EQ(runtime.getStateMachine().currentOutputEvents().size(), 1u);
+    EXPECT_EQ(runtime.getStateMachine().currentOutputEvents().front().id,
+              output_event_type::PUBLISH_ESTIMATE);
+
+    runtime.update(1.02);
+    EXPECT_TRUE(runtime.getStateMachine().currentOutputEvents().empty());
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, MissingImuPublishesSelfCheckOutputWithFlags) {
@@ -113,7 +129,7 @@ TEST(HoverThrustEstimatorRuntimeTest, MissingImuPublishesSelfCheckOutputWithFlag
 
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kSelfCheck);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kImuMissing, 0u);
-    EXPECT_DOUBLE_EQ(output.hover_thrust, 0.5);
+    EXPECT_DOUBLE_EQ(output.hover_thrust, 0.3);
     EXPECT_FALSE(output.sample_used);
 }
 
@@ -127,7 +143,7 @@ TEST(HoverThrustEstimatorRuntimeTest, ReadySamplesMoveToAirborneState) {
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kAirborne);
     EXPECT_EQ(output.flags, 0u);
     EXPECT_TRUE(output.sample_used);
-    EXPECT_GT(output.hover_thrust, 0.5);
+    EXPECT_GT(output.hover_thrust, 0.3);
     EXPECT_DOUBLE_EQ(output.source_stamp_sec, 1.0);
     EXPECT_DOUBLE_EQ(output.last_estimate_stamp_sec, 1.0);
 }
@@ -149,7 +165,7 @@ TEST(HoverThrustEstimatorRuntimeTest, StaleInputHoldsLastSafeEstimate) {
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kImuStale, 0u);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kThrustStale, 0u);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kAltitudeStale, 0u);
-    EXPECT_NEAR(output.hover_thrust, 0.5, 1.0e-4);
+    EXPECT_NEAR(output.hover_thrust, 0.3, 1.0e-4);
     EXPECT_FALSE(output.sample_used);
 }
 
@@ -169,7 +185,7 @@ TEST(HoverThrustEstimatorRuntimeTest, SelfCheckReturnsToDefaultWithoutOutputJump
 
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kSelfCheck);
     EXPECT_LT(output.hover_thrust, airborne_output.hover_thrust);
-    EXPECT_GT(output.hover_thrust, 0.5);
+    EXPECT_GT(output.hover_thrust, 0.3);
     EXPECT_FALSE(output.sample_used);
 }
 
@@ -184,7 +200,7 @@ TEST(HoverThrustEstimatorRuntimeTest, BelowMinimumAltitudeHoldsOutputAndReportsS
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kGround);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kBelowMinAltitude, 0u);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kGroundHold, 0u);
-    EXPECT_DOUBLE_EQ(output.hover_thrust, 0.5);
+    EXPECT_DOUBLE_EQ(output.hover_thrust, 0.3);
     EXPECT_FALSE(output.sample_used);
 }
 
@@ -198,7 +214,7 @@ TEST(HoverThrustEstimatorRuntimeTest, IgnoredThrustReportsInvalidThrust) {
 
     EXPECT_EQ(output.state, HoverThrustRuntimeState::kSelfCheck);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kThrustInvalid, 0u);
-    EXPECT_DOUBLE_EQ(output.hover_thrust, 0.5);
+    EXPECT_DOUBLE_EQ(output.hover_thrust, 0.3);
     EXPECT_FALSE(output.sample_used);
 }
 

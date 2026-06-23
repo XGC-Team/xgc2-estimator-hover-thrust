@@ -65,6 +65,7 @@ void HoverThrustEstimatorRuntime::reset() {
     last_output_update_stamp_sec_ = 0.0;
     last_estimate_stamp_sec_ = 0.0;
     raw_update_requested_ = false;
+    publish_requested_ = false;
     fault_requested_ = false;
     output_filter_.reset(config_.filter_enabled ? config_.filter_cutoff_hz : 0.0,
                          hover_thrust_output_);
@@ -91,6 +92,15 @@ void HoverThrustEstimatorRuntime::requestRawUpdate(double now_sec) {
     event.source = "raw_update_timer";
     event.category = sm::EventCategory::kInput;
     requireOk(machine_->postEvent(std::move(event)), "post raw update event");
+}
+
+void HoverThrustEstimatorRuntime::requestPublish(double now_sec) {
+    current_time_sec_ = now_sec;
+    publish_requested_ = true;
+    sm::Event event(event_type::INPUT_PUBLISH_DUE, sm::EventTimestamp{now_sec});
+    event.source = "publish_timer";
+    event.category = sm::EventCategory::kInput;
+    requireOk(machine_->postEvent(std::move(event)), "post publish event");
 }
 
 HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double now_sec) {
@@ -164,15 +174,23 @@ void HoverThrustEstimatorRuntime::performFault() {
                         health_.flags | HoverThrustRuntimeFlag::kStateMachineFault, false);
 }
 
+bool HoverThrustEstimatorRuntime::consumePublishRequest() {
+    if (!publish_requested_) {
+        return false;
+    }
+    publish_requested_ = false;
+    return true;
+}
+
 void HoverThrustEstimatorRuntime::normalizeConfig() {
     config_.gravity =
         finitePositive(config_.gravity) ? config_.gravity : estimator_limits::kDefaultGravity;
-    config_.min_hover_thrust = std::clamp(finiteOrDefault(config_.min_hover_thrust, 0.05), 0.0,
+    config_.min_hover_thrust = std::clamp(finiteOrDefault(config_.min_hover_thrust, 0.15), 0.0,
                                           estimator_limits::kMaximumNormalizedThrust);
     config_.max_hover_thrust =
-        std::clamp(finiteOrDefault(config_.max_hover_thrust, 0.95), config_.min_hover_thrust,
+        std::clamp(finiteOrDefault(config_.max_hover_thrust, 0.85), config_.min_hover_thrust,
                    estimator_limits::kMaximumNormalizedThrust);
-    config_.initial_hover_thrust = std::clamp(finiteOrDefault(config_.initial_hover_thrust, 0.5),
+    config_.initial_hover_thrust = std::clamp(finiteOrDefault(config_.initial_hover_thrust, 0.3),
                                               config_.min_hover_thrust, config_.max_hover_thrust);
     if (!std::isfinite(config_.rho2) || config_.rho2 <= 0.0 || config_.rho2 > 1.0) {
         config_.rho2 = 0.998;

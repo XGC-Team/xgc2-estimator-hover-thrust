@@ -14,7 +14,9 @@ void FaultState::onEnter() {
 
 void FaultState::onPerform() {
     runtime_.performFault();
-    emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
+    if (runtime_.consumePublishRequest()) {
+        emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
+    }
 }
 
 void FaultState::onExit() {}

@@ -19,8 +19,8 @@ class HoverThrustEstimator {
    public:
     struct Config {
         double rho2{0.998};
-        double min_hover_thrust{0.05};
-        double max_hover_thrust{0.95};
+        double min_hover_thrust{0.15};
+        double max_hover_thrust{0.85};
         bool filter_enabled{false};
         double filter_cutoff_hz{2.0};
     };
@@ -48,7 +48,7 @@ class HoverThrustEstimator {
         const double initial_thr2acc =
             hover_thrust_estimate_ > estimator_limits::kMinimumNormalizedThrust
                 ? gravity_ / hover_thrust_estimate_
-                : gravity_ / 0.5;
+                : gravity_ / 0.3;
         xgc2_observer::ScalarRecursiveLeastSquaresOptions options;
         options.forgetting_factor = config_.rho2;
         options.initial_covariance = 100.0;
@@ -111,8 +111,8 @@ class HoverThrustEstimator {
     double gravity_{9.8066};
     xgc2_observer::ScalarRecursiveLeastSquares rls_{};
     xgc2_observer::ExponentialLowPass hover_thrust_filter_{};
-    double raw_hover_thrust_estimate_{0.5};
-    double hover_thrust_estimate_{0.5};
+    double raw_hover_thrust_estimate_{0.3};
+    double hover_thrust_estimate_{0.3};
     double last_time_sec_{0.0};
     bool valid_{false};
 };

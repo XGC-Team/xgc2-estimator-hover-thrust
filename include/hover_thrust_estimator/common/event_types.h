@@ -22,6 +22,7 @@ constexpr uint32_t INPUT_IMU_UPDATED = 100;
 constexpr uint32_t INPUT_THRUST_UPDATED = 101;
 constexpr uint32_t INPUT_ALTITUDE_UPDATED = 102;
 constexpr uint32_t INPUT_RAW_UPDATE_DUE = 103;
+constexpr uint32_t INPUT_PUBLISH_DUE = 104;
 }  // namespace event_type
 
 namespace output_event_type {

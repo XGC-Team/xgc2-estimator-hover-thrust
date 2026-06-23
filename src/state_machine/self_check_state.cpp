@@ -14,7 +14,9 @@ void SelfCheckState::onEnter() {
 
 void SelfCheckState::onPerform() {
     runtime_.performSelfCheck();
-    emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
+    if (runtime_.consumePublishRequest()) {
+        emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
+    }
 }
 
 void SelfCheckState::onExit() {}
