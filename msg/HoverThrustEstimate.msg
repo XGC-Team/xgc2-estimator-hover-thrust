@@ -29,7 +29,6 @@ uint32 FLAG_ESTIMATOR_REJECTED=1024
 uint32 FLAG_STATE_MACHINE_FAULT=2048
 uint32 FLAG_INPUT_RATE_LOW=4096
 uint32 FLAG_TIME_JUMP=8192
-uint32 FLAG_DEGRADED=16384
 uint32 FLAG_GROUND_HOLD=32768
 uint32 FLAG_RAW_ESTIMATE_STALE=65536
 
@@ -37,4 +36,3 @@ std_msgs/Header header
 uint8 state
 uint32 flags
 float64 hover_thrust
-bool estimate_valid

@@ -19,7 +19,6 @@ constexpr double kDefaultPublishRate = 100.0;
 constexpr double kDefaultRawUpdateRate = 10.0;
 constexpr double kDefaultFilterCutoffHz = 2.0;
 constexpr double kMaxPublishRate = 1000.0;
-constexpr double kDefaultOutputSlewRate = 0.1;
 constexpr double kDefaultInputRateLowHz = 5.0;
 constexpr uint32_t kRosQueueSize = 10;
 
@@ -49,11 +48,10 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
 
     runtime_.setConfig(HoverThrustEstimatorRuntime::Config{
         gravity_, initial_hover_thrust_, rho2_, min_hover_thrust_, max_hover_thrust_, min_altitude_,
-        sample_timeout_, filter_enabled_, filter_cutoff_hz_, output_slew_rate_,
-        input_rate_low_hz_});
+        sample_timeout_, filter_enabled_, filter_cutoff_hz_, input_rate_low_hz_});
 
     output_event_dispatcher_.addConsumer(std::make_unique<HoverThrustOutputConsumer>(
-        nh_, output_event_executor_, runtime_, estimate_state_topic_, estimate_topic_, valid_topic_,
+        nh_, output_event_executor_, runtime_, estimate_state_topic_, estimate_topic_,
         kRosQueueSize));
 
     auto post_input_event = [this](::state_machine::Event event,
@@ -68,10 +66,9 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
 
     ROS_INFO(
         "[HoverThrustEstimatorNode] Initialized: imu=%s target_attitude=%s pose=%s state=%s "
-        "estimate=%s valid=%s publish_rate=%.1f raw_update_rate=%.1f",
+        "estimate=%s publish_rate=%.1f raw_update_rate=%.1f",
         imu_topic_.c_str(), target_attitude_topic_.c_str(), altitude_topic_.c_str(),
-        estimate_state_topic_.c_str(), estimate_topic_.c_str(), valid_topic_.c_str(), publish_rate_,
-        raw_update_rate_);
+        estimate_state_topic_.c_str(), estimate_topic_.c_str(), publish_rate_, raw_update_rate_);
 }
 
 HoverThrustEstimatorNode::~HoverThrustEstimatorNode() {
@@ -112,7 +109,6 @@ void HoverThrustEstimatorNode::loadParams() {
     private_nh_.param("altitude_topic", altitude_topic_, altitude_topic_);
     private_nh_.param("estimate_state_topic", estimate_state_topic_, estimate_state_topic_);
     private_nh_.param("estimate_topic", estimate_topic_, estimate_topic_);
-    private_nh_.param("valid_topic", valid_topic_, valid_topic_);
 
     private_nh_.param("gravity", gravity_, gravity_);
     private_nh_.param("initial_hover_thrust", initial_hover_thrust_, initial_hover_thrust_);
@@ -125,7 +121,6 @@ void HoverThrustEstimatorNode::loadParams() {
     private_nh_.param("raw_update_rate", raw_update_rate_, raw_update_rate_);
     private_nh_.param("filter_enabled", filter_enabled_, filter_enabled_);
     private_nh_.param("filter_cutoff_hz", filter_cutoff_hz_, filter_cutoff_hz_);
-    private_nh_.param("output_slew_rate", output_slew_rate_, output_slew_rate_);
     private_nh_.param("input_rate_low_hz", input_rate_low_hz_, input_rate_low_hz_);
 
     gravity_ = finiteOrDefault(gravity_, kDefaultGravity);
@@ -161,9 +156,6 @@ void HoverThrustEstimatorNode::loadParams() {
     }
     if (filter_cutoff_hz_ <= 0.0) {
         filter_enabled_ = false;
-    }
-    if (!std::isfinite(output_slew_rate_) || output_slew_rate_ < 0.0) {
-        output_slew_rate_ = kDefaultOutputSlewRate;
     }
     if (!std::isfinite(input_rate_low_hz_) || input_rate_low_hz_ < 0.0) {
         input_rate_low_hz_ = kDefaultInputRateLowHz;

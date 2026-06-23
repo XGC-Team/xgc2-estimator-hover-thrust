@@ -6,7 +6,7 @@
 
 #include "hover_thrust_estimator/common/event_types.h"
 #include "hover_thrust_estimator/hover_thrust_estimator.h"
-#include "xgc2_observer/slew_rate_limiter.hpp"
+#include "xgc2_observer/exponential_filter.hpp"
 
 namespace hover_thrust_estimator {
 
@@ -32,7 +32,6 @@ enum HoverThrustRuntimeFlag : uint32_t {
     kStateMachineFault = 1u << 11,
     kInputRateLow = 1u << 12,
     kTimeJump = 1u << 13,
-    kDegraded = 1u << 14,
     kGroundHold = 1u << 15,
     kRawEstimateStale = 1u << 16,
 };
@@ -53,9 +52,8 @@ class HoverThrustEstimatorRuntime {
         double max_hover_thrust{0.95};
         double min_altitude{0.5};
         double sample_timeout{0.2};
-        bool filter_enabled{false};
+        bool filter_enabled{true};
         double filter_cutoff_hz{2.0};
-        double output_slew_rate{0.1};
         double input_rate_low_hz{5.0};
     };
 
@@ -82,9 +80,6 @@ class HoverThrustEstimatorRuntime {
         double raw_hover_thrust{0.5};
         double initial_hover_thrust{0.5};
         double thrust_to_acceleration{estimator_limits::kDefaultGravity / 0.5};
-        bool estimator_valid{false};
-        bool estimate_valid{false};
-        bool degraded{true};
         bool sample_used{false};
         double source_stamp_sec{0.0};
         double last_estimate_stamp_sec{0.0};
@@ -132,8 +127,6 @@ class HoverThrustEstimatorRuntime {
         HoverThrustRuntimeState state{HoverThrustRuntimeState::kSelfCheck};
         uint32_t flags{0};
         bool ready{false};
-        bool degraded{true};
-        bool estimate_valid{false};
         double source_stamp_sec{0.0};
     };
 
@@ -148,6 +141,9 @@ class HoverThrustEstimatorRuntime {
     Output publishForState(HoverThrustRuntimeState state, uint32_t flags, bool sample_used);
     Output makeOutput(HoverThrustRuntimeState state, uint32_t flags, bool sample_used,
                       const Classification& classification, double output_stamp_sec) const;
+    void driveOutputToward(double target_hover_thrust);
+    void holdCurrentOutput();
+    double outputDeltaTime() const;
 
     Config config_{};
     HoverThrustEstimator estimator_{};
@@ -156,10 +152,12 @@ class HoverThrustEstimatorRuntime {
     uint32_t flags_{0};
     Input input_{};
     Classification health_{};
-    xgc2_observer::SlewRateLimiter output_slew_limiter_{};
+    xgc2_observer::ExponentialLowPass output_filter_{};
+    double target_hover_thrust_output_{0.5};
     double hover_thrust_output_{0.5};
     double raw_hover_thrust_output_{0.5};
     double current_time_sec_{0.0};
+    double last_output_update_stamp_sec_{0.0};
     double last_estimate_stamp_sec_{0.0};
     bool raw_update_requested_{false};
     bool fault_requested_{false};

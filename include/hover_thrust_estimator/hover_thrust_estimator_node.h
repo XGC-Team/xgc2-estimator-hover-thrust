@@ -40,7 +40,6 @@ class HoverThrustEstimatorNode {
     std::string altitude_topic_{"mavros/local_position/pose"};
     std::string estimate_state_topic_{"hover_thrust/estimate_state"};
     std::string estimate_topic_{"hover_thrust/estimate"};
-    std::string valid_topic_{"hover_thrust/valid"};
 
     double gravity_{9.8066};
     double initial_hover_thrust_{0.5};
@@ -51,9 +50,8 @@ class HoverThrustEstimatorNode {
     double sample_timeout_{0.2};
     double publish_rate_{100.0};
     double raw_update_rate_{10.0};
-    bool filter_enabled_{false};
+    bool filter_enabled_{true};
     double filter_cutoff_hz_{2.0};
-    double output_slew_rate_{0.1};
     double input_rate_low_hz_{5.0};
 };
 

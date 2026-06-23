@@ -19,7 +19,6 @@ namespace {
 namespace sm = state_machine;
 
 constexpr double kDefaultSampleTimeout = 0.2;
-constexpr double kDefaultOutputSlewRate = 0.1;
 constexpr double kMinimumInputRateHz = 1.0e-3;
 
 void requireOk(const sm::Status& status, const char* operation) {
@@ -54,21 +53,23 @@ void HoverThrustEstimatorRuntime::setConfig(const Config& config) {
 }
 
 void HoverThrustEstimatorRuntime::reset() {
-    estimator_.setConfig(HoverThrustEstimator::Config{
-        config_.rho2, config_.min_hover_thrust, config_.max_hover_thrust, config_.filter_enabled,
-        config_.filter_cutoff_hz});
+    estimator_.setConfig(HoverThrustEstimator::Config{config_.rho2, config_.min_hover_thrust,
+                                                      config_.max_hover_thrust, false, 0.0});
     estimator_.reset(config_.gravity, config_.initial_hover_thrust);
     input_ = Input{};
     health_ = Classification{};
+    target_hover_thrust_output_ = config_.initial_hover_thrust;
     hover_thrust_output_ = config_.initial_hover_thrust;
     raw_hover_thrust_output_ = config_.initial_hover_thrust;
     current_time_sec_ = 0.0;
+    last_output_update_stamp_sec_ = 0.0;
     last_estimate_stamp_sec_ = 0.0;
     raw_update_requested_ = false;
     fault_requested_ = false;
-    output_slew_limiter_.reset(config_.output_slew_rate, hover_thrust_output_);
+    output_filter_.reset(config_.filter_enabled ? config_.filter_cutoff_hz : 0.0,
+                         hover_thrust_output_);
     state_ = HoverThrustRuntimeState::kSelfCheck;
-    flags_ = HoverThrustRuntimeFlag::kDegraded;
+    flags_ = 0;
     last_output_ = makeOutput(state_, flags_, false, health_, current_time_sec_);
     setupMachine();
 }
@@ -121,10 +122,13 @@ void HoverThrustEstimatorRuntime::enterState(HoverThrustRuntimeState state) {
 }
 
 void HoverThrustEstimatorRuntime::performSelfCheck() {
+    target_hover_thrust_output_ = config_.initial_hover_thrust;
+    driveOutputToward(target_hover_thrust_output_);
     last_output_ = publishForState(HoverThrustRuntimeState::kSelfCheck, health_.flags, false);
 }
 
 void HoverThrustEstimatorRuntime::performGround() {
+    holdCurrentOutput();
     last_output_ = publishForState(HoverThrustRuntimeState::kGround, health_.flags, false);
 }
 
@@ -137,19 +141,9 @@ void HoverThrustEstimatorRuntime::performAirborne() {
             sample_used = estimator_.update(input_.imu_acc_z.value, input_.normalized_thrust.value,
                                             input_.normalized_thrust.stamp_sec);
             if (sample_used) {
-                raw_hover_thrust_output_ = std::clamp(
-                    estimator_.rawEstimate(), config_.min_hover_thrust, config_.max_hover_thrust);
-                const double dt_s = last_estimate_stamp_sec_ > 0.0
-                                        ? std::max(0.0, input_.normalized_thrust.stamp_sec -
-                                                            last_estimate_stamp_sec_)
-                                        : 0.0;
-                const double filtered = std::clamp(estimator_.estimate(), config_.min_hover_thrust,
-                                                   config_.max_hover_thrust);
-                hover_thrust_output_ =
-                    std::clamp(output_slew_limiter_.filter(filtered, dt_s),
-                               config_.min_hover_thrust, config_.max_hover_thrust);
+                raw_hover_thrust_output_ = estimator_.rawEstimate();
+                target_hover_thrust_output_ = raw_hover_thrust_output_;
                 last_estimate_stamp_sec_ = input_.normalized_thrust.stamp_sec;
-                health_.estimate_valid = true;
             } else {
                 target_flags |= HoverThrustRuntimeFlag::kEstimatorRejected;
             }
@@ -159,6 +153,7 @@ void HoverThrustEstimatorRuntime::performAirborne() {
         raw_update_requested_ = false;
     }
 
+    driveOutputToward(target_hover_thrust_output_);
     last_output_ = publishForState(HoverThrustRuntimeState::kAirborne, target_flags, sample_used);
 }
 
@@ -191,9 +186,6 @@ void HoverThrustEstimatorRuntime::normalizeConfig() {
     if (!std::isfinite(config_.filter_cutoff_hz) || config_.filter_cutoff_hz <= 0.0) {
         config_.filter_cutoff_hz = 0.0;
         config_.filter_enabled = false;
-    }
-    if (!std::isfinite(config_.output_slew_rate) || config_.output_slew_rate < 0.0) {
-        config_.output_slew_rate = kDefaultOutputSlewRate;
     }
     if (!std::isfinite(config_.input_rate_low_hz) || config_.input_rate_low_hz <= 0.0) {
         config_.input_rate_low_hz = 0.0;
@@ -317,8 +309,7 @@ HoverThrustEstimatorRuntime::Classification HoverThrustEstimatorRuntime::classif
     double now_sec) const {
     Classification result;
     result.state = HoverThrustRuntimeState::kSelfCheck;
-    result.flags = HoverThrustRuntimeFlag::kDegraded;
-    result.degraded = true;
+    result.flags = 0;
 
     if (!input_.imu_acc_z.received) {
         result.flags |= HoverThrustRuntimeFlag::kImuMissing;
@@ -380,18 +371,14 @@ HoverThrustEstimatorRuntime::Classification HoverThrustEstimatorRuntime::classif
     const double altitude = input_.altitude.value;
     if (altitude < config_.min_altitude) {
         result.state = HoverThrustRuntimeState::kGround;
-        result.flags |= HoverThrustRuntimeFlag::kBelowMinAltitude |
-                        HoverThrustRuntimeFlag::kGroundHold | HoverThrustRuntimeFlag::kDegraded;
-        result.degraded = true;
-        result.estimate_valid = estimator_.valid();
+        result.flags |=
+            HoverThrustRuntimeFlag::kBelowMinAltitude | HoverThrustRuntimeFlag::kGroundHold;
         return result;
     }
 
     result.state = HoverThrustRuntimeState::kAirborne;
     result.flags = 0;
     result.ready = true;
-    result.degraded = false;
-    result.estimate_valid = estimator_.valid();
     result.source_stamp_sec = input_.normalized_thrust.stamp_sec;
     return result;
 }
@@ -437,22 +424,46 @@ HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::makeOutput(
     Output output;
     output.state = state;
     output.flags = flags;
-    output.hover_thrust = state == HoverThrustRuntimeState::kSelfCheck
-                              ? config_.initial_hover_thrust
-                              : hover_thrust_output_;
+    output.hover_thrust = hover_thrust_output_;
     output.raw_hover_thrust = raw_hover_thrust_output_;
     output.initial_hover_thrust = config_.initial_hover_thrust;
     output.thrust_to_acceleration = output.hover_thrust > estimator_limits::kMinimumNormalizedThrust
                                         ? config_.gravity / output.hover_thrust
                                         : config_.gravity / config_.initial_hover_thrust;
-    output.degraded = classification.degraded || state != HoverThrustRuntimeState::kAirborne;
-    output.estimate_valid = classification.estimate_valid && !output.degraded &&
-                            state == HoverThrustRuntimeState::kAirborne && estimator_.valid();
-    output.estimator_valid = output.estimate_valid;
     output.sample_used = sample_used;
     output.source_stamp_sec = classification.source_stamp_sec;
     output.last_estimate_stamp_sec = last_estimate_stamp_sec_;
     return output;
+}
+
+void HoverThrustEstimatorRuntime::driveOutputToward(double target_hover_thrust) {
+    const double target =
+        std::clamp(finiteOrDefault(target_hover_thrust, config_.initial_hover_thrust),
+                   config_.min_hover_thrust, config_.max_hover_thrust);
+    hover_thrust_output_ = std::clamp(output_filter_.filter(target, outputDeltaTime()),
+                                      config_.min_hover_thrust, config_.max_hover_thrust);
+    last_output_update_stamp_sec_ = current_time_sec_;
+}
+
+void HoverThrustEstimatorRuntime::holdCurrentOutput() {
+    hover_thrust_output_ =
+        std::clamp(hover_thrust_output_, config_.min_hover_thrust, config_.max_hover_thrust);
+    target_hover_thrust_output_ = hover_thrust_output_;
+    output_filter_.resetState(hover_thrust_output_);
+    last_output_update_stamp_sec_ = current_time_sec_;
+}
+
+double HoverThrustEstimatorRuntime::outputDeltaTime() const {
+    if (!std::isfinite(current_time_sec_)) {
+        return 0.0;
+    }
+    if (!std::isfinite(last_output_update_stamp_sec_) || last_output_update_stamp_sec_ <= 0.0) {
+        return std::max(0.0, current_time_sec_);
+    }
+    if (current_time_sec_ + 0.05 < last_output_update_stamp_sec_) {
+        return 0.0;
+    }
+    return std::max(0.0, current_time_sec_ - last_output_update_stamp_sec_);
 }
 
 }  // namespace hover_thrust_estimator
