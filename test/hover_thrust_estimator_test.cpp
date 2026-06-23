@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 
 #include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
 
@@ -293,6 +294,102 @@ TEST(HoverThrustEstimatorRuntimeTest, IgnoredThrustReportsInvalidThrust) {
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kThrustInvalid, 0u);
     EXPECT_DOUBLE_EQ(output.hover_thrust, 0.3);
     EXPECT_FALSE(output.sample_used);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, TimeJumpReturnsToSelfCheckWithFlag) {
+    HoverThrustEstimatorRuntime runtime;
+    auto input = readyInput(1.0, 0.8, 0.5);
+    input.imu_acc_z.stamp_sec = 1.2;
+    input.normalized_thrust.stamp_sec = 1.2;
+    input.altitude.stamp_sec = 1.2;
+
+    postAllInputEvents(runtime, input);
+    const auto output = runtime.update(1.0);
+
+    EXPECT_EQ(output.state, state_type::SelfCheck);
+    EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kTimeJump, 0u);
+    EXPECT_FALSE(output.sample_used);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, LowInputRateReturnsToSelfCheckWithFlag) {
+    HoverThrustEstimatorRuntime runtime;
+    auto input = readyInput(1.0, 0.8, 0.5);
+    input.imu_acc_z.period_sec = 1.0;
+    input.normalized_thrust.period_sec = 1.0;
+    input.altitude.period_sec = 1.0;
+
+    postAllInputEvents(runtime, input);
+    const auto output = runtime.update(1.0);
+
+    EXPECT_EQ(output.state, state_type::SelfCheck);
+    EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kInputRateLow, 0u);
+    EXPECT_FALSE(output.sample_used);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, NonFiniteInputsReturnToSelfCheckWithFlags) {
+    HoverThrustEstimatorRuntime runtime;
+    auto input = readyInput(1.0, 0.8, 0.5);
+    input.imu_acc_z.value = std::numeric_limits<double>::quiet_NaN();
+    input.imu_acc_z.finite = false;
+    input.normalized_thrust.value = std::numeric_limits<double>::quiet_NaN();
+    input.normalized_thrust.finite = false;
+    input.altitude.value = std::numeric_limits<double>::quiet_NaN();
+    input.altitude.finite = false;
+
+    postAllInputEvents(runtime, input);
+    const auto output = runtime.update(1.0);
+
+    EXPECT_EQ(output.state, state_type::SelfCheck);
+    EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kImuInvalid, 0u);
+    EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kThrustInvalid, 0u);
+    EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kAltitudeInvalid, 0u);
+    EXPECT_FALSE(output.sample_used);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, GroundAndAirborneCanRecoverBothDirections) {
+    HoverThrustEstimatorRuntime runtime;
+    auto ground_input = readyInput(1.0, 0.8, 0.5);
+    ground_input.altitude.value = 0.1;
+
+    postAllInputEvents(runtime, ground_input);
+    const auto ground_output = runtime.update(1.0);
+    ASSERT_EQ(ground_output.state, state_type::Ground);
+
+    postAllInputEvents(runtime, readyInput(1.02, 0.8, 0.5));
+    const auto airborne_output = runtime.update(1.02);
+    EXPECT_EQ(airborne_output.state, state_type::Airborne);
+    EXPECT_TRUE(airborne_output.sample_used);
+
+    auto low_again = readyInput(1.04, 0.7, 0.5);
+    low_again.altitude.value = 0.1;
+    postAllInputEvents(runtime, low_again);
+    const auto ground_again = runtime.update(1.04);
+
+    EXPECT_EQ(ground_again.state, state_type::Ground);
+    EXPECT_NE(ground_again.flags & HoverThrustRuntimeFlag::kGroundHold, 0u);
+    EXPECT_FALSE(ground_again.sample_used);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, RawUpdateIsLimitedToConfiguredRate) {
+    HoverThrustEstimatorRuntime runtime;
+
+    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    const auto first_output = runtime.update(1.0);
+    ASSERT_EQ(first_output.state, state_type::Airborne);
+    ASSERT_TRUE(first_output.sample_used);
+    ASSERT_DOUBLE_EQ(first_output.last_estimate_stamp_sec, 1.0);
+
+    postAllInputEvents(runtime, readyInput(1.05, 0.7, 0.5));
+    const auto skipped_output = runtime.update(1.05);
+    EXPECT_EQ(skipped_output.state, state_type::Airborne);
+    EXPECT_FALSE(skipped_output.sample_used);
+    EXPECT_DOUBLE_EQ(skipped_output.last_estimate_stamp_sec, 1.0);
+
+    postAllInputEvents(runtime, readyInput(1.101, 0.7, 0.5));
+    const auto updated_output = runtime.update(1.101);
+    EXPECT_EQ(updated_output.state, state_type::Airborne);
+    EXPECT_TRUE(updated_output.sample_used);
+    EXPECT_DOUBLE_EQ(updated_output.last_estimate_stamp_sec, 1.101);
 }
 
 }  // namespace
