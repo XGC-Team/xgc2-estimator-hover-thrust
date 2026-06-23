@@ -10,6 +10,8 @@ SelfCheckState::SelfCheckState(HoverThrustEstimatorRuntime& runtime)
 
 void SelfCheckState::onEnter() {
     runtime_.enterState(state_type::SelfCheck);
+    runtime_.outputModel().setTarget(runtime_.config().initial_hover_thrust);
+    publish_gate_.reset();
 }
 
 void SelfCheckState::onPerform() {
@@ -17,14 +19,18 @@ void SelfCheckState::onPerform() {
         return;
     }
 
-    runtime_.outputModel().setTarget(runtime_.config().initial_hover_thrust);
-    runtime_.outputModel().driveTowardTarget(runtime_.currentTime());
-    runtime_.publishForState(state_type::SelfCheck, runtime_.health().flags, false);
-    if (runtime_.consumePublishRequest()) {
+    runtime_.recordStateOutput(state_type::SelfCheck, runtime_.health().flags, false);
+    publishEstimateIfDue();
+}
+
+void SelfCheckState::publishEstimateIfDue() {
+    if (publish_gate_.due(runtime_.currentTime(), 1.0 / runtime_.config().publish_rate_hz)) {
         emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
     }
 }
 
-void SelfCheckState::onExit() {}
+void SelfCheckState::onExit() {
+    publish_gate_.reset();
+}
 
 }  // namespace hover_thrust_estimator

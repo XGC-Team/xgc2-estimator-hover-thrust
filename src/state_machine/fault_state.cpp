@@ -10,18 +10,24 @@ FaultState::FaultState(HoverThrustEstimatorRuntime& runtime)
 
 void FaultState::onEnter() {
     runtime_.enterState(state_type::Fault);
+    publish_gate_.reset();
 }
 
 void FaultState::onPerform() {
-    (void)runtime_.consumeRawUpdateRequest();
-    runtime_.publishForState(state_type::Fault,
-                             runtime_.health().flags | HoverThrustRuntimeFlag::kStateMachineFault,
-                             false);
-    if (runtime_.consumePublishRequest()) {
+    runtime_.recordStateOutput(state_type::Fault,
+                               runtime_.health().flags | HoverThrustRuntimeFlag::kStateMachineFault,
+                               false);
+    publishEstimateIfDue();
+}
+
+void FaultState::publishEstimateIfDue() {
+    if (publish_gate_.due(runtime_.currentTime(), 1.0 / runtime_.config().publish_rate_hz)) {
         emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
     }
 }
 
-void FaultState::onExit() {}
+void FaultState::onExit() {
+    publish_gate_.reset();
+}
 
 }  // namespace hover_thrust_estimator

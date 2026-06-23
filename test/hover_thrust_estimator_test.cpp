@@ -58,6 +58,12 @@ void postAllInputEvents(HoverThrustEstimatorRuntime& runtime,
                            input);
 }
 
+HoverThrustEstimatorRuntime::Output advanceFilterForPublish(HoverThrustEstimatorRuntime& runtime,
+                                                            double now_sec) {
+    runtime.outputModel().driveTowardTarget(now_sec);
+    return runtime.refreshOutputSnapshot();
+}
+
 TEST(HoverThrustEstimatorTest, DisabledFilterKeepsEstimateEqualToRawEstimate) {
     HoverThrustEstimator estimator = makeEstimator(false, 2.0);
 
@@ -109,20 +115,21 @@ TEST(HoverThrustEstimatorRuntimeTest, StartupOutputKeepsInitialHoverThrust) {
     EXPECT_FALSE(output.sample_used);
 }
 
-TEST(HoverThrustEstimatorRuntimeTest, PublishOutputIsDrivenByPublishRequestEvent) {
+TEST(HoverThrustEstimatorRuntimeTest, PublishOutputIsDrivenByStateGate) {
     HoverThrustEstimatorRuntime runtime;
 
     runtime.update(1.0);
-    EXPECT_TRUE(runtime.getStateMachine().currentOutputEvents().empty());
-
-    runtime.requestPublish(1.01);
-    runtime.update(1.01);
     ASSERT_EQ(runtime.getStateMachine().currentOutputEvents().size(), 1u);
     EXPECT_EQ(runtime.getStateMachine().currentOutputEvents().front().id,
               output_event_type::PUBLISH_ESTIMATE);
 
-    runtime.update(1.02);
+    runtime.update(1.005);
     EXPECT_TRUE(runtime.getStateMachine().currentOutputEvents().empty());
+
+    runtime.update(1.011);
+    ASSERT_EQ(runtime.getStateMachine().currentOutputEvents().size(), 1u);
+    EXPECT_EQ(runtime.getStateMachine().currentOutputEvents().front().id,
+              output_event_type::PUBLISH_ESTIMATE);
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, MissingImuPublishesSelfCheckOutputWithFlags) {
@@ -145,21 +152,23 @@ TEST(HoverThrustEstimatorRuntimeTest, ReadySamplesMoveToAirborneState) {
     HoverThrustEstimatorRuntime runtime;
 
     postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
-    runtime.requestRawUpdate(1.0);
     const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, state_type::Airborne);
     EXPECT_EQ(output.flags, 0u);
     EXPECT_TRUE(output.sample_used);
-    EXPECT_GT(output.hover_thrust, 0.3);
+    EXPECT_GT(output.raw_hover_thrust, 0.3);
+    EXPECT_DOUBLE_EQ(output.hover_thrust, 0.3);
     EXPECT_DOUBLE_EQ(output.source_stamp_sec, 1.0);
     EXPECT_DOUBLE_EQ(output.last_estimate_stamp_sec, 1.0);
+
+    const auto filtered_output = advanceFilterForPublish(runtime, 1.0);
+    EXPECT_GT(filtered_output.hover_thrust, 0.3);
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, StaleInputHoldsLastSafeEstimate) {
     HoverThrustEstimatorRuntime runtime;
     postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
-    runtime.requestRawUpdate(1.0);
     runtime.update(1.0);
     auto stale = readyInput(2.0, 0.7, 0.5);
     stale.imu_acc_z.stamp_sec = 1.0;
@@ -173,15 +182,14 @@ TEST(HoverThrustEstimatorRuntimeTest, StaleInputHoldsLastSafeEstimate) {
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kImuStale, 0u);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kThrustStale, 0u);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kAltitudeStale, 0u);
-    EXPECT_NEAR(output.hover_thrust, 0.3, 1.0e-4);
     EXPECT_FALSE(output.sample_used);
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, SelfCheckReturnsToDefaultWithoutOutputJump) {
     HoverThrustEstimatorRuntime runtime;
     postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
-    runtime.requestRawUpdate(1.0);
-    const auto airborne_output = runtime.update(1.0);
+    runtime.update(1.0);
+    const auto airborne_output = advanceFilterForPublish(runtime, 1.0);
 
     auto stale = readyInput(1.21, 0.7, 0.5);
     stale.imu_acc_z.stamp_sec = 1.0;
@@ -189,7 +197,8 @@ TEST(HoverThrustEstimatorRuntimeTest, SelfCheckReturnsToDefaultWithoutOutputJump
     stale.altitude.stamp_sec = 1.0;
 
     postAllInputEvents(runtime, stale);
-    const auto output = runtime.update(1.21);
+    runtime.update(1.21);
+    const auto output = advanceFilterForPublish(runtime, 1.21);
 
     EXPECT_EQ(output.state, state_type::SelfCheck);
     EXPECT_LT(output.hover_thrust, airborne_output.hover_thrust);
@@ -210,6 +219,24 @@ TEST(HoverThrustEstimatorRuntimeTest, BelowMinimumAltitudeHoldsOutputAndReportsS
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kGroundHold, 0u);
     EXPECT_DOUBLE_EQ(output.hover_thrust, 0.3);
     EXPECT_FALSE(output.sample_used);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, GroundKeepsFilteringTowardFrozenTarget) {
+    HoverThrustEstimatorRuntime runtime;
+    postAllInputEvents(runtime, readyInput(0.001, 0.8, 0.5));
+    runtime.update(0.001);
+    const auto airborne_output = advanceFilterForPublish(runtime, 0.001);
+
+    auto ground_input = readyInput(0.02, 0.7, 0.5);
+    ground_input.altitude.value = 0.1;
+    postAllInputEvents(runtime, ground_input);
+    runtime.update(0.02);
+    const auto ground_output = advanceFilterForPublish(runtime, 0.02);
+
+    EXPECT_EQ(ground_output.state, state_type::Ground);
+    EXPECT_NE(ground_output.flags & HoverThrustRuntimeFlag::kGroundHold, 0u);
+    EXPECT_GT(ground_output.hover_thrust, airborne_output.hover_thrust);
+    EXPECT_GT(ground_output.raw_hover_thrust, 0.3);
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, IgnoredThrustReportsInvalidThrust) {

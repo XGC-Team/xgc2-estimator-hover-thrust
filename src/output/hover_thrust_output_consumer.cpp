@@ -58,8 +58,9 @@ bool HoverThrustOutputConsumer::handle(const ::state_machine::Event& event) {
         return false;
     }
 
-    const HoverThrustOutput output = runtime_.snapshotOutput();
     const ros::Time stamp = eventStampOrNow(event);
+    runtime_.outputModel().driveTowardTarget(stamp.toSec());
+    const HoverThrustOutput output = runtime_.refreshOutputSnapshot();
     executor_.pushTask(makePublishTask("PublishHoverThrustEstimate", estimate_state_pub_,
                                        estimate_pub_, makeEstimateStateMessage(output, stamp),
                                        makeEstimateMessage(output)));

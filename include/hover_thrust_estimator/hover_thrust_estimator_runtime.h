@@ -25,13 +25,12 @@ class HoverThrustEstimatorRuntime {
     void setConfig(const Config& config);
     void reset();
     ::state_machine::Status postInputEvent(::state_machine::Event event, const Input& input);
-    void requestRawUpdate(double now_sec);
-    void requestPublish(double now_sec);
     Output update(double now_sec);
     Output output(double now_sec) const;
     Output snapshotOutput() const {
         return last_output_;
     }
+    Output refreshOutputSnapshot();
     ::state_machine::StateMachine& getStateMachine() {
         return *machine_;
     }
@@ -70,12 +69,10 @@ class HoverThrustEstimatorRuntime {
     const HoverThrustOutputModel& outputModel() const {
         return output_model_;
     }
-    bool consumeRawUpdateRequest();
-    bool consumePublishRequest();
     void setLastEstimateStamp(double stamp_sec) {
         last_estimate_stamp_sec_ = stamp_sec;
     }
-    Output publishForState(HoverThrustStateId state, uint32_t flags, bool sample_used);
+    Output recordStateOutput(HoverThrustStateId state, uint32_t flags, bool sample_used);
     double currentTime() const {
         return current_time_sec_;
     }
@@ -96,8 +93,7 @@ class HoverThrustEstimatorRuntime {
     HoverThrustOutputModel output_model_{};
     double current_time_sec_{0.0};
     double last_estimate_stamp_sec_{0.0};
-    bool raw_update_requested_{false};
-    bool publish_requested_{false};
+    bool last_sample_used_{false};
     bool fault_requested_{false};
     Output last_output_{};
 };

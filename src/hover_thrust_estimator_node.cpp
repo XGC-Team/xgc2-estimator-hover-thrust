@@ -18,19 +18,6 @@ constexpr double kDefaultRawUpdateRate = 10.0;
 constexpr double kMaxLoopRate = 5000.0;
 constexpr uint32_t kRosQueueSize = 10;
 
-bool timerDue(double now_sec, double last_update_sec, bool initialized, double period_sec) {
-    if (!std::isfinite(now_sec)) {
-        return false;
-    }
-    if (!initialized) {
-        return true;
-    }
-    if (now_sec + 0.05 < last_update_sec) {
-        return true;
-    }
-    return now_sec - last_update_sec >= period_sec;
-}
-
 }  // namespace
 
 HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
@@ -39,7 +26,8 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
 
     runtime_.setConfig(HoverThrustEstimatorRuntime::Config{
         gravity_, initial_hover_thrust_, rho2_, min_hover_thrust_, max_hover_thrust_, min_altitude_,
-        sample_timeout_, filter_enabled_, filter_cutoff_hz_, input_rate_low_hz_});
+        sample_timeout_, filter_enabled_, filter_cutoff_hz_, input_rate_low_hz_, publish_rate_,
+        raw_update_rate_});
 
     output_event_dispatcher_.addConsumer(std::make_unique<HoverThrustOutputConsumer>(
         nh_, output_event_executor_, runtime_, estimate_state_topic_, estimate_topic_,
@@ -69,12 +57,6 @@ HoverThrustEstimatorNode::~HoverThrustEstimatorNode() {
 void HoverThrustEstimatorNode::run(double frequency) {
     const double loop_frequency =
         std::isfinite(frequency) && frequency > 0.0 ? frequency : loop_rate_;
-    const double publish_period = 1.0 / publish_rate_;
-    const double raw_update_period = 1.0 / raw_update_rate_;
-    bool publish_initialized = false;
-    bool raw_update_initialized = false;
-    double last_publish_sec = 0.0;
-    double last_raw_update_sec = 0.0;
 
     ROS_INFO(
         "[HoverThrustEstimatorNode] Starting estimator loop at %.1f Hz, publishing at %.1f Hz, "
@@ -86,17 +68,6 @@ void HoverThrustEstimatorNode::run(double frequency) {
         ros::spinOnce();
 
         const double now_sec = ros::Time::now().toSec();
-        if (timerDue(now_sec, last_raw_update_sec, raw_update_initialized, raw_update_period)) {
-            runtime_.requestRawUpdate(now_sec);
-            last_raw_update_sec = now_sec;
-            raw_update_initialized = true;
-        }
-        if (timerDue(now_sec, last_publish_sec, publish_initialized, publish_period)) {
-            runtime_.requestPublish(now_sec);
-            last_publish_sec = now_sec;
-            publish_initialized = true;
-        }
-
         runtime_.update(now_sec);
         dispatchOutputEvents(runtime_.getStateMachine().currentOutputEvents());
         rate.sleep();
@@ -140,7 +111,8 @@ void HoverThrustEstimatorNode::loadParams() {
 
     const auto estimator_config = config_utils::normalizeConfig(HoverThrustEstimatorConfig{
         gravity_, initial_hover_thrust_, rho2_, min_hover_thrust_, max_hover_thrust_, min_altitude_,
-        sample_timeout_, filter_enabled_, filter_cutoff_hz_, input_rate_low_hz_});
+        sample_timeout_, filter_enabled_, filter_cutoff_hz_, input_rate_low_hz_, publish_rate_,
+        raw_update_rate_});
     gravity_ = estimator_config.gravity;
     initial_hover_thrust_ = estimator_config.initial_hover_thrust;
     rho2_ = estimator_config.rho2;
@@ -151,6 +123,8 @@ void HoverThrustEstimatorNode::loadParams() {
     filter_enabled_ = estimator_config.filter_enabled;
     filter_cutoff_hz_ = estimator_config.filter_cutoff_hz;
     input_rate_low_hz_ = estimator_config.input_rate_low_hz;
+    publish_rate_ = estimator_config.publish_rate_hz;
+    raw_update_rate_ = estimator_config.raw_update_rate_hz;
 
     if (!std::isfinite(loop_rate_) || loop_rate_ <= 0.0) {
         loop_rate_ = kDefaultLoopRate;

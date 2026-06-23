@@ -10,6 +10,8 @@ GroundState::GroundState(HoverThrustEstimatorRuntime& runtime)
 
 void GroundState::onEnter() {
     runtime_.enterState(state_type::Ground);
+    runtime_.outputModel().freezeTarget();
+    publish_gate_.reset();
 }
 
 void GroundState::onPerform() {
@@ -17,13 +19,18 @@ void GroundState::onPerform() {
         return;
     }
 
-    runtime_.outputModel().hold(runtime_.currentTime());
-    runtime_.publishForState(state_type::Ground, runtime_.health().flags, false);
-    if (runtime_.consumePublishRequest()) {
+    runtime_.recordStateOutput(state_type::Ground, runtime_.health().flags, false);
+    publishEstimateIfDue();
+}
+
+void GroundState::publishEstimateIfDue() {
+    if (publish_gate_.due(runtime_.currentTime(), 1.0 / runtime_.config().publish_rate_hz)) {
         emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
     }
 }
 
-void GroundState::onExit() {}
+void GroundState::onExit() {
+    publish_gate_.reset();
+}
 
 }  // namespace hover_thrust_estimator

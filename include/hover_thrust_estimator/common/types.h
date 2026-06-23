@@ -40,6 +40,8 @@ struct HoverThrustEstimatorConfig {
     bool filter_enabled{true};
     double filter_cutoff_hz{2.0};
     double input_rate_low_hz{5.0};
+    double publish_rate_hz{100.0};
+    double raw_update_rate_hz{10.0};
 };
 
 struct HoverThrustSample {

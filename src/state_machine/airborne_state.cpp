@@ -10,6 +10,8 @@ AirborneState::AirborneState(HoverThrustEstimatorRuntime& runtime)
 
 void AirborneState::onEnter() {
     runtime_.enterState(state_type::Airborne);
+    raw_update_gate_.reset();
+    publish_gate_.reset();
 }
 
 void AirborneState::onPerform() {
@@ -18,33 +20,43 @@ void AirborneState::onPerform() {
     }
 
     uint32_t flags = runtime_.health().flags;
-    bool sample_used = false;
+    const bool sample_used = updateRawEstimateIfDue(flags);
+    runtime_.recordStateOutput(state_type::Airborne, flags, sample_used);
+    publishEstimateIfDue();
+}
 
-    if (runtime_.consumeRawUpdateRequest()) {
-        if (runtime_.health().ready) {
-            const auto& input = runtime_.input();
-            sample_used =
-                runtime_.estimator().update(input.imu_acc_z.value, input.normalized_thrust.value,
-                                            input.normalized_thrust.stamp_sec);
-            if (sample_used) {
-                runtime_.outputModel().setRaw(runtime_.estimator().rawEstimate());
-                runtime_.outputModel().setTarget(runtime_.estimator().rawEstimate());
-                runtime_.setLastEstimateStamp(input.normalized_thrust.stamp_sec);
-            } else {
-                flags |= HoverThrustRuntimeFlag::kEstimatorRejected;
-            }
-        } else {
-            flags |= HoverThrustRuntimeFlag::kRawEstimateStale;
-        }
+bool AirborneState::updateRawEstimateIfDue(uint32_t& flags) {
+    if (!raw_update_gate_.due(runtime_.currentTime(), 1.0 / runtime_.config().raw_update_rate_hz)) {
+        return false;
+    }
+    if (!runtime_.health().ready) {
+        flags |= HoverThrustRuntimeFlag::kRawEstimateStale;
+        return false;
     }
 
-    runtime_.outputModel().driveTowardTarget(runtime_.currentTime());
-    runtime_.publishForState(state_type::Airborne, flags, sample_used);
-    if (runtime_.consumePublishRequest()) {
+    const auto& input = runtime_.input();
+    const bool sample_used = runtime_.estimator().update(
+        input.imu_acc_z.value, input.normalized_thrust.value, input.normalized_thrust.stamp_sec);
+    if (!sample_used) {
+        flags |= HoverThrustRuntimeFlag::kEstimatorRejected;
+        return false;
+    }
+
+    runtime_.outputModel().setRaw(runtime_.estimator().rawEstimate());
+    runtime_.outputModel().setTarget(runtime_.estimator().rawEstimate());
+    runtime_.setLastEstimateStamp(input.normalized_thrust.stamp_sec);
+    return true;
+}
+
+void AirborneState::publishEstimateIfDue() {
+    if (publish_gate_.due(runtime_.currentTime(), 1.0 / runtime_.config().publish_rate_hz)) {
         emitOutputEvent(output_event_type::PUBLISH_ESTIMATE, runtime_.currentTime());
     }
 }
 
-void AirborneState::onExit() {}
+void AirborneState::onExit() {
+    raw_update_gate_.reset();
+    publish_gate_.reset();
+}
 
 }  // namespace hover_thrust_estimator

@@ -15,6 +15,8 @@ constexpr double kDefaultMinAltitude = 0.5;
 constexpr double kDefaultSampleTimeout = 0.2;
 constexpr double kDefaultFilterCutoffHz = 2.0;
 constexpr double kDefaultInputRateLowHz = 5.0;
+constexpr double kDefaultPublishRateHz = 100.0;
+constexpr double kDefaultRawUpdateRateHz = 10.0;
 
 inline bool finitePositive(double value) {
     return std::isfinite(value) && value > 0.0;
@@ -51,6 +53,12 @@ inline HoverThrustEstimatorConfig normalizeConfig(HoverThrustEstimatorConfig con
     }
     if (!std::isfinite(config.input_rate_low_hz) || config.input_rate_low_hz < 0.0) {
         config.input_rate_low_hz = kDefaultInputRateLowHz;
+    }
+    if (!std::isfinite(config.publish_rate_hz) || config.publish_rate_hz <= 0.0) {
+        config.publish_rate_hz = kDefaultPublishRateHz;
+    }
+    if (!std::isfinite(config.raw_update_rate_hz) || config.raw_update_rate_hz <= 0.0) {
+        config.raw_update_rate_hz = kDefaultRawUpdateRateHz;
     }
     return config;
 }

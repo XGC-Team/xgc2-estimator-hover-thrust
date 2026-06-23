@@ -56,12 +56,9 @@ class HoverThrustOutputModel {
         last_update_stamp_sec_ = current_time_sec;
     }
 
-    void hold(double current_time_sec) {
-        hover_thrust_ =
-            std::clamp(hover_thrust_, config_.min_hover_thrust, config_.max_hover_thrust);
-        target_hover_thrust_ = hover_thrust_;
-        filter_.resetState(hover_thrust_);
-        last_update_stamp_sec_ = current_time_sec;
+    void freezeTarget() {
+        target_hover_thrust_ =
+            std::clamp(target_hover_thrust_, config_.min_hover_thrust, config_.max_hover_thrust);
     }
 
    private:

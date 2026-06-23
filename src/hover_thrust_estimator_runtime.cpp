@@ -43,8 +43,7 @@ void HoverThrustEstimatorRuntime::reset() {
     output_model_.reset(config_);
     current_time_sec_ = 0.0;
     last_estimate_stamp_sec_ = 0.0;
-    raw_update_requested_ = false;
-    publish_requested_ = false;
+    last_sample_used_ = false;
     fault_requested_ = false;
     state_ = state_type::SelfCheck;
     flags_ = 0;
@@ -56,24 +55,6 @@ sm::Status HoverThrustEstimatorRuntime::postInputEvent(sm::Event event, const In
     applyInputEvent(input);
     event.category = sm::EventCategory::kInput;
     return machine_->postEvent(std::move(event));
-}
-
-void HoverThrustEstimatorRuntime::requestRawUpdate(double now_sec) {
-    current_time_sec_ = now_sec;
-    raw_update_requested_ = true;
-    sm::Event event(event_type::INPUT_RAW_UPDATE_DUE, sm::EventTimestamp{now_sec});
-    event.source = "raw_update_timer";
-    event.category = sm::EventCategory::kInput;
-    requireOk(machine_->postEvent(std::move(event)), "post raw update event");
-}
-
-void HoverThrustEstimatorRuntime::requestPublish(double now_sec) {
-    current_time_sec_ = now_sec;
-    publish_requested_ = true;
-    sm::Event event(event_type::INPUT_PUBLISH_DUE, sm::EventTimestamp{now_sec});
-    event.source = "publish_timer";
-    event.category = sm::EventCategory::kInput;
-    requireOk(machine_->postEvent(std::move(event)), "post publish event");
 }
 
 HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double now_sec) {
@@ -95,24 +76,13 @@ HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::output(double n
     return makeOutput(state_, flags_, false, health_);
 }
 
+HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::refreshOutputSnapshot() {
+    last_output_ = makeOutput(state_, flags_, last_sample_used_, health_);
+    return last_output_;
+}
+
 void HoverThrustEstimatorRuntime::enterState(HoverThrustStateId state) {
     state_ = state;
-}
-
-bool HoverThrustEstimatorRuntime::consumeRawUpdateRequest() {
-    if (!raw_update_requested_) {
-        return false;
-    }
-    raw_update_requested_ = false;
-    return true;
-}
-
-bool HoverThrustEstimatorRuntime::consumePublishRequest() {
-    if (!publish_requested_) {
-        return false;
-    }
-    publish_requested_ = false;
-    return true;
 }
 
 void HoverThrustEstimatorRuntime::setupMachine() {
@@ -229,13 +199,14 @@ void HoverThrustEstimatorRuntime::applyInputEvent(const Input& input) {
     input_ = input;
 }
 
-HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::publishForState(
+HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::recordStateOutput(
     HoverThrustStateId state, uint32_t flags, bool sample_used) {
     if (state == state_type::Fault) {
         flags |= HoverThrustRuntimeFlag::kStateMachineFault;
     }
     flags_ = flags;
     state_ = state;
+    last_sample_used_ = sample_used;
     last_output_ = makeOutput(state_, flags_, sample_used, health_);
     return last_output_;
 }
