@@ -51,7 +51,6 @@ target_link_libraries(hover_thrust_estimator_math
 add_library(hover_thrust_estimator_core
   src/input/hover_thrust_input_producer.cpp
   src/output/hover_thrust_output_consumer.cpp
-  src/output/output_event_consumer.cpp
   src/hover_thrust_estimator_node.cpp
 )
 add_dependencies(hover_thrust_estimator_core ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})

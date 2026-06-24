@@ -3,14 +3,14 @@
 #include <ros/ros.h>
 
 #include <memory>
+#include <state_machine/runtime/async_task_executor.hpp>
+#include <state_machine/runtime/event_dispatcher.hpp>
 #include <string>
 #include <vector>
 
 #include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
 #include "hover_thrust_estimator/input/hover_thrust_input_producer.h"
 #include "hover_thrust_estimator/output/hover_thrust_output_consumer.h"
-#include "hover_thrust_estimator/output/output_event_consumer.h"
-#include "hover_thrust_estimator/output/ros_output_runtime.h"
 
 namespace hover_thrust_estimator {
 
@@ -31,8 +31,8 @@ class HoverThrustEstimatorNode {
     ros::NodeHandle private_nh_;
 
     HoverThrustEstimatorRuntime runtime_;
-    RosOutputExecutor output_event_executor_;
-    OutputEventDispatcher output_event_dispatcher_;
+    ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle> output_event_executor_;
+    ::state_machine::runtime::EventDispatcher output_event_dispatcher_;
     std::unique_ptr<HoverThrustInputProducer> input_producer_;
 
     std::string imu_topic_{"mavros/imu/data"};

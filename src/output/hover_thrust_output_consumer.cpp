@@ -28,10 +28,10 @@ uint8_t toMessageState(::state_machine::StateId state) {
     }
 }
 
-std::unique_ptr<RosOutputTask> makePublishTask(
+std::unique_ptr<::state_machine::runtime::Task<ros::NodeHandle>> makePublishTask(
     std::string name, ros::Publisher estimate_state_pub,
     hover_thrust_estimator::HoverThrustEstimate estimate_state_msg) {
-    return std::make_unique<RosLambdaOutputTask>(
+    return std::make_unique<::state_machine::runtime::LambdaTask<ros::NodeHandle>>(
         std::move(name),
         [estimate_state_pub = std::move(estimate_state_pub),
          estimate_state_msg = std::move(estimate_state_msg)](ros::NodeHandle&) mutable {
@@ -41,11 +41,9 @@ std::unique_ptr<RosOutputTask> makePublishTask(
 
 }  // namespace
 
-HoverThrustOutputConsumer::HoverThrustOutputConsumer(ros::NodeHandle& nh,
-                                                     RosOutputExecutor& executor,
-                                                     HoverThrustEstimatorRuntime& runtime,
-                                                     std::string estimate_state_topic,
-                                                     uint32_t queue_size)
+HoverThrustOutputConsumer::HoverThrustOutputConsumer(
+    ros::NodeHandle& nh, ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle>& executor,
+    HoverThrustEstimatorRuntime& runtime, std::string estimate_state_topic, uint32_t queue_size)
     : executor_(executor), runtime_(runtime) {
     estimate_state_pub_ = nh.advertise<hover_thrust_estimator::HoverThrustEstimate>(
         estimate_state_topic, queue_size, true);

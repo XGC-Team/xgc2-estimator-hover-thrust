@@ -105,7 +105,16 @@ void HoverThrustEstimatorNode::loadParams() {
 
 void HoverThrustEstimatorNode::dispatchOutputEvents(
     const std::vector<::state_machine::Event>& events) {
-    output_event_dispatcher_.dispatch(events);
+    const auto result = output_event_dispatcher_.dispatch(events);
+    for (const auto& event : result.unhandled_events) {
+        ROS_WARN("[HoverThrustEstimatorNode] Unhandled output event id: %u",
+                 static_cast<unsigned>(event.id));
+    }
+    for (const auto& failure : result.failures) {
+        ROS_WARN("[HoverThrustEstimatorNode] Output consumer '%s' failed on event %u: %s",
+                 failure.consumer_name.c_str(), static_cast<unsigned>(failure.event.id),
+                 failure.message.c_str());
+    }
 }
 
 }  // namespace hover_thrust_estimator
