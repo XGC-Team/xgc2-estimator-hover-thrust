@@ -17,7 +17,7 @@ apt:
   packages:
     - ros-noetic-xgc2-estimator-hover-thrust
   depends:
-    - libxgc2-observer-dev (>= 0.3.2-1)
+    - libxgc2-math-dev (>= 0.4.0-1)
     - libxgc2-state-machine-dev (>= 0.1.2-1~focal)
     - ros-noetic-xgc2-ros1-utils
 

@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <xgc2_observer/exponential_filter.hpp>
-#include <xgc2_observer/recursive_least_squares.hpp>
+#include <estimation/recursive_least_squares.hpp>
+#include <filter/exponential_filter.hpp>
 
 namespace hover_thrust_estimator {
 namespace estimator_limits {
@@ -49,7 +49,7 @@ class HoverThrustEstimator {
             hover_thrust_estimate_ > estimator_limits::kMinimumNormalizedThrust
                 ? gravity_ / hover_thrust_estimate_
                 : gravity_ / 0.3;
-        xgc2_observer::ScalarRecursiveLeastSquaresOptions options;
+        xgc2_math::ScalarRecursiveLeastSquaresOptions options;
         options.forgetting_factor = config_.rho2;
         options.initial_covariance = 100.0;
         options.min_abs_regressor = estimator_limits::kMinimumNormalizedThrust;
@@ -109,8 +109,8 @@ class HoverThrustEstimator {
    private:
     Config config_{};
     double gravity_{9.8066};
-    xgc2_observer::ScalarRecursiveLeastSquares rls_{};
-    xgc2_observer::ExponentialLowPass hover_thrust_filter_{};
+    xgc2_math::ScalarRecursiveLeastSquares rls_{};
+    xgc2_math::ExponentialLowPass hover_thrust_filter_{};
     double raw_hover_thrust_estimate_{0.3};
     double hover_thrust_estimate_{0.3};
     double last_time_sec_{0.0};

@@ -10,7 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   ros1_utils
   message_generation
 )
-find_package(xgc2_observer REQUIRED CONFIG)
+find_package(xgc2_math REQUIRED CONFIG)
 find_package(xgc2_state_machine REQUIRED CONFIG)
 
 add_message_files(
@@ -44,7 +44,7 @@ add_library(hover_thrust_estimator_math
 )
 target_compile_features(hover_thrust_estimator_math PUBLIC cxx_std_17)
 target_link_libraries(hover_thrust_estimator_math
-  xgc2_observer::observer
+  xgc2_math::math
   xgc2_state_machine::state_machine
 )
 
@@ -79,7 +79,7 @@ if(CATKIN_ENABLE_TESTING)
     target_compile_features(${PROJECT_NAME}_core_test PUBLIC cxx_std_17)
     target_link_libraries(${PROJECT_NAME}_core_test
       hover_thrust_estimator_math
-      xgc2_observer::observer
+      xgc2_math::math
       xgc2_state_machine::state_machine
       ${catkin_LIBRARIES}
     )

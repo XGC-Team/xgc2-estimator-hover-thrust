@@ -61,7 +61,7 @@ docker run --rm \
       fakeroot \
       file \
       git \
-      libxgc2-observer-dev \
+      libxgc2-math-dev \
       libxgc2-state-machine-dev \
       rsync \
       ros-noetic-geometry-msgs \

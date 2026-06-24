@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <cmath>
 
+#include "filter/exponential_filter.hpp"
 #include "hover_thrust_estimator/common/config_utils.h"
 #include "hover_thrust_estimator/common/types.h"
-#include "xgc2_observer/exponential_filter.hpp"
 
 namespace hover_thrust_estimator {
 
@@ -77,7 +77,7 @@ class HoverThrustOutputModel {
     }
 
     HoverThrustEstimatorConfig config_{};
-    xgc2_observer::ExponentialLowPass filter_{};
+    xgc2_math::ExponentialLowPass filter_{};
     double target_hover_thrust_{0.3};
     double hover_thrust_{0.3};
     double raw_hover_thrust_{0.3};

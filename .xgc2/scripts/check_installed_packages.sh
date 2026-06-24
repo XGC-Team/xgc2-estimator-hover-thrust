@@ -8,11 +8,11 @@ source "/opt/ros/${ROS_DISTRO}/setup.bash"
 set -u
 
 dpkg -s ros-noetic-xgc2-estimator-hover-thrust >/dev/null
-dpkg -s libxgc2-observer-dev >/dev/null
+dpkg -s libxgc2-math-dev >/dev/null
 dpkg -s libxgc2-state-machine-dev >/dev/null
 dpkg -s ros-noetic-xgc2-ros1-utils >/dev/null
-test -f /usr/include/xgc2_observer/recursive_least_squares.hpp
-test -f /usr/include/xgc2_observer/slew_rate_limiter.hpp
+test -f /usr/include/xgc2_math/estimation/recursive_least_squares.hpp
+test -f /usr/include/xgc2_math/filter/slew_rate_limiter.hpp
 test -f /usr/include/state_machine/state_machine.hpp
 test "$(rospack find hover_thrust_estimator)" = "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator"
 test -f "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator/config/hover_thrust_estimator.yaml"
