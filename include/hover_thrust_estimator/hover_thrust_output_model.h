@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "filter/exponential_filter.hpp"
+#include <xgc2_math/filter/exponential_filter.hpp>
 #include "hover_thrust_estimator/common/config_utils.h"
 #include "hover_thrust_estimator/common/types.h"
 

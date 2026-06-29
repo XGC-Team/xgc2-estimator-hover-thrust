@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <estimation/recursive_least_squares.hpp>
-#include <filter/exponential_filter.hpp>
+#include <xgc2_math/estimation/recursive_least_squares.hpp>
+#include <xgc2_math/filter/exponential_filter.hpp>
 
 namespace hover_thrust_estimator {
 namespace estimator_limits {
