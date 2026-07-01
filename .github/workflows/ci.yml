@@ -1,0 +1,137 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - noetic
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  cpp-quality:
+    name: C++ quality
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    container: ros:noetic-ros-base-focal
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install quality dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates
+          echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
+            > /etc/apt/sources.list.d/xgc2.list
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            clang-format \
+            clang-tidy \
+            cmake \
+            git \
+            libxgc2-math-dev \
+            libxgc2-state-machine-dev \
+            rsync \
+            ros-noetic-geometry-msgs \
+            ros-noetic-mavros-msgs \
+            ros-noetic-message-generation \
+            ros-noetic-roscpp \
+            ros-noetic-xgc2-ros1-utils \
+            ros-noetic-sensor-msgs \
+            ros-noetic-std-msgs
+
+      - name: Run C++ quality gate
+        run: .xgc2/scripts/check_cpp_quality.sh
+
+  package-compliance:
+    name: Package compliance and tests
+    runs-on: ubuntu-latest
+    container: ros:noetic-ros-base-focal
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Install build dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates
+          echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
+            > /etc/apt/sources.list.d/xgc2.list
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            git \
+            libxgc2-math-dev \
+            libxgc2-state-machine-dev \
+            rsync \
+            ros-noetic-geometry-msgs \
+            ros-noetic-mavros-msgs \
+            ros-noetic-message-generation \
+            ros-noetic-roscpp \
+            ros-noetic-roslaunch \
+            ros-noetic-rospack \
+            ros-noetic-xgc2-ros1-utils \
+            ros-noetic-sensor-msgs \
+            ros-noetic-std-msgs
+
+      - name: Check package metadata
+        run: git diff --check HEAD
+
+      - name: Build package and run launch compliance
+        run: |
+          set -euo pipefail
+          work_dir="${RUNNER_TEMP}/estimator-hover-thrust-compliance"
+          install_root="${RUNNER_TEMP}/estimator-hover-thrust-install-root"
+          rm -rf "$work_dir" "$install_root"
+          mkdir -p "$work_dir/src/hover_thrust_estimator"
+          rsync -a --delete "$GITHUB_WORKSPACE/" "$work_dir/src/hover_thrust_estimator/"
+
+          cd "$work_dir"
+          set +u
+          source /opt/ros/noetic/setup.bash
+          set -u
+          catkin_make run_tests_hover_thrust_estimator
+          catkin_test_results
+          DESTDIR="$install_root" catkin_make install \
+            -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
+            -DCMAKE_BUILD_TYPE=Release
+          set +u
+          source devel/setup.bash
+          set -u
+          test "$(rospack find hover_thrust_estimator)" = "$work_dir/src/hover_thrust_estimator"
+          roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch >/tmp/xgc2-hover-thrust-estimator-files.txt
+
+  build-debs:
+    name: Build debs (${{ matrix.arch }})
+    needs: package-compliance
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and install-check deb package in Docker
+        run: |
+          .xgc2/scripts/build_debs_in_docker.sh \
+            --work-dir "$RUNNER_TEMP/estimator-hover-thrust-${{ matrix.arch }}" \
+            --output-dir "$GITHUB_WORKSPACE/debs"
+
+      - name: Upload deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xgc2-estimator-hover-thrust-debs-${{ matrix.arch }}
+          path: debs/*.deb
