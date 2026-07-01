@@ -58,6 +58,13 @@ jobs:
         if: ${{ !inputs.run_cpp_quality }}
         run: echo "C++ quality disabled by input"
 
+      - name: Install checkout dependencies
+        if: inputs.run_cpp_quality
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git
+
       - uses: actions/checkout@v4
         if: inputs.run_cpp_quality
 
@@ -101,6 +108,13 @@ jobs:
         if: ${{ !inputs.run_source_tests }}
         run: echo "Source tests disabled by input"
 
+      - name: Install checkout dependencies
+        if: inputs.run_source_tests
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git
+
       - uses: actions/checkout@v4
         if: inputs.run_source_tests
         with:
@@ -134,7 +148,9 @@ jobs:
 
       - name: Check package metadata
         if: inputs.run_source_tests
-        run: git diff --check HEAD
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git diff --check HEAD
 
       - name: Build package and run launch compliance
         if: inputs.run_source_tests

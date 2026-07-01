@@ -18,6 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     container: ros:noetic-ros-base-focal
     steps:
+      - name: Install checkout dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git
+
       - uses: actions/checkout@v4
 
       - name: Install quality dependencies
@@ -53,6 +59,12 @@ jobs:
     runs-on: ubuntu-latest
     container: ros:noetic-ros-base-focal
     steps:
+      - name: Install checkout dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
@@ -83,7 +95,9 @@ jobs:
             ros-noetic-std-msgs
 
       - name: Check package metadata
-        run: git diff --check HEAD
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git diff --check HEAD
 
       - name: Build package and run launch compliance
         run: |
