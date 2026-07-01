@@ -1,37 +1,36 @@
 schema: xgc2.product.v1
 id: xgc2-estimator-hover-thrust
 name: XGC2 Hover Thrust Estimator
-version: 1.1.22-2
+version: 1.1.22-3
 kind: ros1-apt
 summary: Hover thrust estimation package for PX4/MAVROS UAV controllers.
-
 ros:
   distro: noetic
   packages:
-    - hover_thrust_estimator
-
+  - hover_thrust_estimator
 apt:
   distribution: focal
   install:
-    - ros-noetic-xgc2-estimator-hover-thrust
+  - ros-noetic-xgc2-estimator-hover-thrust
   packages:
-    - ros-noetic-xgc2-estimator-hover-thrust
+  - ros-noetic-xgc2-estimator-hover-thrust
   depends:
-    - libxgc2-math-dev (>= 0.4.0-1)
-    - libxgc2-state-machine-dev (>= 0.1.2-1~focal)
-    - ros-noetic-xgc2-ros1-utils
-
+  - libxgc2-math-dev (>= 0.5.5-2)
+  - libxgc2-state-machine-dev (>= 0.1.2-2~focal)
+  - ros-noetic-xgc2-ros1-utils
 usage:
-  install: |
-    sudo apt update
-    sudo apt install ros-noetic-xgc2-estimator-hover-thrust
-  smoke_test: |
-    roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch
+  install: 'sudo apt update
 
+    sudo apt install ros-noetic-xgc2-estimator-hover-thrust
+
+    '
+  smoke_test: 'roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch
+
+    '
 ownership:
   paths:
-    - /opt/ros/noetic/share/hover_thrust_estimator
-    - /opt/ros/noetic/include/hover_thrust_estimator
-    - /opt/ros/noetic/lib/hover_thrust_estimator
-    - /opt/ros/noetic/lib/libhover_thrust_estimator_math.so
-    - /opt/ros/noetic/lib/libhover_thrust_estimator_core.so
+  - /opt/ros/noetic/share/hover_thrust_estimator
+  - /opt/ros/noetic/include/hover_thrust_estimator
+  - /opt/ros/noetic/lib/hover_thrust_estimator
+  - /opt/ros/noetic/lib/libhover_thrust_estimator_math.so
+  - /opt/ros/noetic/lib/libhover_thrust_estimator_core.so
