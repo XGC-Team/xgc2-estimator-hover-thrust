@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-estimator-hover-thrust
 name: XGC2 Hover Thrust Estimator
-version: 1.1.22-4
+version: 1.1.22-5
 kind: ros1-apt
 summary: Hover thrust estimation package for PX4/MAVROS UAV controllers.
 ros:
@@ -15,8 +15,8 @@ apt:
   packages:
   - ros-noetic-xgc2-estimator-hover-thrust
   depends:
-  - libxgc2-math-dev (>= 0.5.5-3)
-  - libxgc2-state-machine-dev (>= 0.1.2-3~focal)
+  - libxgc2-math-dev (>= 0.5.5-4)
+  - libxgc2-state-machine-dev (>= 0.1.2-4~focal)
   - ros-noetic-xgc2-ros1-utils
 usage:
   install: 'sudo apt update
