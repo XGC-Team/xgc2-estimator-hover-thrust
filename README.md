@@ -128,38 +128,83 @@ status is not ready.
 
 ## Estimation Math
 
-The estimator fits a scalar thrust-to-acceleration model:
+The upstream controller/NMPC usually reasons in acceleration or specific force,
+while PX4's attitude target interface expects a normalized collective thrust
+command. This package provides the conversion scale between those two domains.
+
+The model assumes that the PX4 normalized thrust command produces body-z
+acceleration through a positive scalar gain:
 
 $$
-a_z \approx \theta u
+a_z^B \approx \theta(t) u
 $$
 
 where:
 
-- $a_z$ is IMU linear acceleration along the body z axis.
-- $u$ is MAVROS normalized thrust from `AttitudeTarget.thrust`.
-- $\theta$ is the estimated thrust-to-acceleration gain.
+- $a_z^B$ is the measured IMU body-z acceleration used as the
+  thrust-acceleration observation.
+- $u$ is MAVROS/PX4 normalized thrust from `AttitudeTarget.thrust`.
+- $\theta(t)$ is the normalized-thrust-to-acceleration gain.
 
-The hover thrust estimate is computed as:
+The gain is treated as fixed or slowly time-varying over the estimator window.
+This captures battery voltage drop, propeller efficiency changes, payload
+changes, and other slow actuator-scale effects without modeling the full
+multirotor dynamics.
+
+The recursive least-squares estimator identifies $\theta$ from accepted sample
+pairs:
+
+$$
+\left(u_k, a_{z,k}^B\right)
+$$
+
+when the state machine is `Airborne`, input health is `EstimationReady`, and the
+`raw_update_rate` gate is due. The RLS forgetting factor is `rho2`.
+
+At hover, the body-z thrust acceleration balances gravity:
+
+$$
+a_z^B \approx g
+$$
+
+so the normalized hover thrust is:
 
 $$
 u_h = \frac{g}{\theta}
 $$
 
-where $g$ is the configured gravity. The raw estimate is clamped to:
+The downstream acceleration-to-thrust conversion can then use:
+
+$$
+u_{\mathrm{cmd}} \approx \frac{a_{z,\mathrm{cmd}}^B}{\theta}
+                 = \frac{u_h}{g} a_{z,\mathrm{cmd}}^B
+$$
+
+where $a_{z,\mathrm{cmd}}^B$ must already be the desired body-z thrust
+acceleration. If the controller produces a world-frame acceleration target, the
+controller must first account for attitude and gravity projection before using
+this one-dimensional gain.
+
+The raw hover-thrust estimate is clamped to:
 
 $$
 u_h \in [u_{\min}, u_{\max}]
 $$
 
-The RLS forgetting factor is `rho2`. The published estimate is optionally
-low-pass filtered by the output model when publishing is due:
+The published estimate is optionally low-pass filtered by the output model when
+publishing is due:
 
 $$
 \hat{u}_{h,\mathrm{pub}} = \mathrm{LPF}(u_{h,\mathrm{raw}}, f_c)
 $$
 
 where $f_c$ is `filter_cutoff_hz`.
+
+This scalar model is intentionally simple. It does not explicitly model large
+maneuver aerodynamics, motor/propeller nonlinearities, thrust saturation,
+allocation limits, attitude-dependent gravity projection, IMU bias, or timestamp
+misalignment between the IMU and thrust command. Those effects appear as model
+error or rejected samples rather than separate states.
 
 ## Topics and Parameters
 
