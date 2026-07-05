@@ -48,6 +48,7 @@ jobs:
             ros-noetic-message-generation \
             ros-noetic-roscpp \
             ros-noetic-rostest \
+            ros-noetic-xgc2-estimator-hover-thrust-msgs \
             ros-noetic-xgc2-ros1-utils \
             ros-noetic-xgc2-state-machine-msgs \
             ros-noetic-sensor-msgs \
@@ -93,6 +94,7 @@ jobs:
             ros-noetic-roslaunch \
             ros-noetic-rospack \
             ros-noetic-rostest \
+            ros-noetic-xgc2-estimator-hover-thrust-msgs \
             ros-noetic-xgc2-ros1-utils \
             ros-noetic-xgc2-state-machine-msgs \
             ros-noetic-sensor-msgs \
@@ -127,7 +129,7 @@ jobs:
           source devel/setup.bash
           set -u
           test "$(rospack find hover_thrust_estimator)" = "$work_dir/src/hover-thrust/hover_thrust_estimator"
-          test "$(rospack find hover_thrust_estimator_msgs)" = "$work_dir/src/hover-thrust/hover_thrust_estimator_msgs"
+          test "$(rospack find hover_thrust_estimator_msgs)" = "/opt/ros/noetic/share/hover_thrust_estimator_msgs"
           roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch >/tmp/xgc2-hover-thrust-estimator-files.txt
 
   build-debs:

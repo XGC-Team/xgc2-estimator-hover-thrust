@@ -6,10 +6,8 @@ OUTPUT_DIR=""
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-ESTIMATOR_PACKAGE="ros-noetic-xgc2-estimator-hover-thrust"
-MSGS_PACKAGE="ros-noetic-xgc2-estimator-hover-thrust-msgs"
+ESTIMATOR_PACKAGE="ros-${ROS_DISTRO}-xgc2-estimator-hover-thrust"
 ESTIMATOR_ROS_PACKAGE="hover_thrust_estimator"
-MSGS_ROS_PACKAGE="hover_thrust_estimator_msgs"
 
 product_version() {
   awk -F': *' '/^version:[[:space:]]*/ {print $2; exit}' "${REPO_ROOT}/.xgc2/product.yml"
@@ -39,11 +37,6 @@ if [[ -z "${INSTALL_ROOT}" || -z "${OUTPUT_DIR}" ]]; then
   exit 1
 fi
 
-if [[ -z "${VERSION}" ]]; then
-  echo "package version is missing" >&2
-  exit 1
-fi
-
 ARCH="$(dpkg --print-architecture)"
 PREFIX="/opt/ros/${ROS_DISTRO}"
 PREFIX_ROOT="${INSTALL_ROOT}${PREFIX}"
@@ -66,39 +59,6 @@ copy_path() {
   fi
 }
 
-build_deb() {
-  local pkg_root="$1"
-  local package_name="$2"
-  fakeroot dpkg-deb --build "${pkg_root}" \
-    "${OUTPUT_DIR}/${package_name}_${VERSION}_${ARCH}.deb" >/dev/null
-}
-
-msgs_pkg_root="${BUILD_DIR}/${MSGS_PACKAGE}"
-mkdir -p "${msgs_pkg_root}"
-
-copy_path "${PREFIX_ROOT}/share/${MSGS_ROS_PACKAGE}" "${msgs_pkg_root}"
-copy_path "${PREFIX_ROOT}/include/${MSGS_ROS_PACKAGE}" "${msgs_pkg_root}"
-copy_path "${PREFIX_ROOT}/lib/pkgconfig/${MSGS_ROS_PACKAGE}.pc" "${msgs_pkg_root}"
-copy_path "${PREFIX_ROOT}/lib/python3/dist-packages/${MSGS_ROS_PACKAGE}" "${msgs_pkg_root}"
-copy_path "${PREFIX_ROOT}/share/gennodejs/ros/${MSGS_ROS_PACKAGE}" "${msgs_pkg_root}"
-copy_path "${PREFIX_ROOT}/share/common-lisp/ros/${MSGS_ROS_PACKAGE}" "${msgs_pkg_root}"
-copy_path "${PREFIX_ROOT}/share/roseus/ros/${MSGS_ROS_PACKAGE}" "${msgs_pkg_root}"
-
-mkdir -p "${msgs_pkg_root}/DEBIAN" "${msgs_pkg_root}/usr/share/doc/${MSGS_PACKAGE}"
-cat > "${msgs_pkg_root}/DEBIAN/control" <<EOF
-Package: ${MSGS_PACKAGE}
-Version: ${VERSION}
-Section: misc
-Priority: optional
-Architecture: ${ARCH}
-Maintainer: XGC2 <apt@example.com>
-Depends: ros-noetic-message-runtime, ros-noetic-std-msgs
-Description: XGC2 hover thrust estimation message interfaces
-EOF
-printf 'xgc2-estimator-hover-thrust message package\n' > "${msgs_pkg_root}/usr/share/doc/${MSGS_PACKAGE}/README"
-chmod 0755 "${msgs_pkg_root}/DEBIAN"
-build_deb "${msgs_pkg_root}" "${MSGS_PACKAGE}"
-
 estimator_pkg_root="${BUILD_DIR}/${ESTIMATOR_PACKAGE}"
 mkdir -p "${estimator_pkg_root}"
 
@@ -117,11 +77,14 @@ Section: misc
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: XGC2 <apt@example.com>
-Depends: ${MSGS_PACKAGE} (= ${VERSION}), libxgc2-math-dev (>= 0.5.6-1), libxgc2-state-machine-dev (>= 0.1.3-1~focal), ros-noetic-xgc2-ros1-utils, ros-noetic-xgc2-state-machine-msgs, ros-noetic-roscpp, ros-noetic-sensor-msgs, ros-noetic-geometry-msgs, ros-noetic-mavros-msgs
+Depends: ros-${ROS_DISTRO}-xgc2-estimator-hover-thrust-msgs (>= 1.2.0-1), libxgc2-math-dev (>= 0.5.6-1), libxgc2-state-machine-dev (>= 0.1.3-1~focal), ros-${ROS_DISTRO}-xgc2-ros1-utils, ros-${ROS_DISTRO}-xgc2-state-machine-msgs (>= 1.2.0-1), ros-${ROS_DISTRO}-roscpp, ros-${ROS_DISTRO}-sensor-msgs, ros-${ROS_DISTRO}-geometry-msgs, ros-${ROS_DISTRO}-mavros-msgs
 Description: XGC2 hover thrust estimation package for PX4/MAVROS UAV controllers
 EOF
 printf 'xgc2-estimator-hover-thrust package\n' > "${estimator_pkg_root}/usr/share/doc/${ESTIMATOR_PACKAGE}/README"
+find "${estimator_pkg_root}" -type d -exec chmod 0755 {} +
+find "${estimator_pkg_root}" -type f -exec chmod 0644 {} +
 chmod 0755 "${estimator_pkg_root}/DEBIAN"
-build_deb "${estimator_pkg_root}" "${ESTIMATOR_PACKAGE}"
 
+fakeroot dpkg-deb --build "${estimator_pkg_root}" \
+  "${OUTPUT_DIR}/${ESTIMATOR_PACKAGE}_${VERSION}_${ARCH}.deb" >/dev/null
 find "${OUTPUT_DIR}" -maxdepth 1 -type f -name '*.deb' -print | sort
