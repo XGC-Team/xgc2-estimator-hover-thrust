@@ -128,23 +128,36 @@ status is not ready.
 
 ## Estimation Math
 
-The upstream controller/NMPC usually reasons in acceleration or specific force,
-while PX4's attitude target interface expects a normalized collective thrust
-command. This package provides the conversion scale between those two domains.
+The estimator identifies the scale between PX4/MAVROS normalized collective
+thrust and the body-z specific thrust seen by the vehicle. The controller can
+then use that scale to convert an NMPC body-z thrust command into the normalized
+thrust field expected by PX4.
 
-The model assumes that the PX4 normalized thrust command produces body-z
-acceleration through a positive scalar gain:
+The IMU observation used by this package is the direct z component of
+`sensor_msgs/Imu.linear_acceleration` from `mavros/imu/data`:
 
 $$
-a_z^B \approx \theta(t) u
+a_{z,\mathrm{imu}}^B = \mathrm{linear\_acceleration.z}
 $$
 
-where:
+It is treated as a body-frame accelerometer/specific-force observation, not as a
+gravity-subtracted world-frame translational acceleration. For a level,
+stationary or hovering vehicle this value is expected to be close to $+g$, not
+zero. The estimator therefore does not add or subtract gravity from the IMU
+sample.
 
-- $a_z^B$ is the measured IMU body-z acceleration used as the
-  thrust-acceleration observation.
-- $u$ is MAVROS/PX4 normalized thrust from `AttitudeTarget.thrust`.
-- $\theta(t)$ is the normalized-thrust-to-acceleration gain.
+The scalar thrust model is:
+
+$$
+a_{z,\mathrm{imu}}^B \approx f_z^B \approx \theta(t) u
+$$
+
+where $u$ is MAVROS/PX4 normalized collective thrust from
+`AttitudeTarget.thrust`, $f_z^B$ is the actual body-z specific thrust
+$(T/m)$, and $\theta(t)$ is the normalized-thrust-to-specific-thrust gain.
+The MAVROS thrust field is not a physical thrust sensor; it is treated as the
+commanded collective input, and the effective gain absorbs the command-to-actual
+thrust relationship.
 
 The gain is treated as fixed or slowly time-varying over the estimator window.
 This captures battery voltage drop, propeller efficiency changes, payload
@@ -155,35 +168,74 @@ The recursive least-squares estimator identifies $\theta$ from accepted sample
 pairs:
 
 $$
-\left(u_k, a_{z,k}^B\right)
+\left(u_k, a_{z,\mathrm{imu},k}^B\right)
 $$
 
 when the state machine is `Airborne`, input health is `EstimationReady`, and the
 `raw_update_rate` gate is due. The RLS forgetting factor is `rho2`.
 
-At hover, the body-z thrust acceleration balances gravity:
-
-$$
-a_z^B \approx g
-$$
-
-so the normalized hover thrust is:
+The published `hover_thrust` is not $\theta$. It is the level-hover normalized
+thrust:
 
 $$
 u_h = \frac{g}{\theta}
 $$
 
-The downstream acceleration-to-thrust conversion can then use:
+Here "level hover" means zero translational acceleration with the body z axis
+aligned with the world vertical direction. Under that condition:
 
 $$
-u_{\mathrm{cmd}} \approx \frac{a_{z,\mathrm{cmd}}^B}{\theta}
-                 = \frac{u_h}{g} a_{z,\mathrm{cmd}}^B
+f_z^B \approx a_{z,\mathrm{imu}}^B \approx g
 $$
 
-where $a_{z,\mathrm{cmd}}^B$ must already be the desired body-z thrust
-acceleration. If the controller produces a world-frame acceleration target, the
-controller must first account for attitude and gravity projection before using
-this one-dimensional gain.
+The controller-side normalization is only a unit conversion from body-z specific
+thrust to PX4 normalized thrust:
+
+$$
+u_{\mathrm{cmd}} = \frac{f_{\mathrm{cmd}}^B}{\theta}
+                 = \frac{u_h}{g} f_{\mathrm{cmd}}^B
+$$
+
+where $f_{\mathrm{cmd}}^B$ is the NMPC body-z specific thrust command
+$(T_{\mathrm{cmd}}/m)$ in m/s^2. For example, if $u_h=0.2777$ and
+$f_{\mathrm{cmd}}^B=10.0$ m/s^2:
+
+$$
+u_{\mathrm{cmd}} \approx 0.2777 \frac{10.0}{9.8066} \approx 0.283
+$$
+
+No attitude projection is applied in this normalization step. Attitude belongs
+to the translational dynamics:
+
+$$
+a^W = R e_3 f^B - g e_3
+$$
+
+so multiplying by an additional tilt or gravity term here would double-count
+modeling already handled by the NMPC.
+
+The reference trajectory acceleration is a different signal. It must be the
+world-frame net translational acceleration:
+
+$$
+a_{\mathrm{ref}}^W = \ddot{p}_{\mathrm{ref}}
+$$
+
+with gravity excluded. The controller converts that flat-output acceleration to
+a body-z specific-thrust reference before giving it to the NMPC:
+
+$$
+f_{\mathrm{ref}}^B = \left\|a_{\mathrm{ref}}^W + g e_3\right\|,
+\qquad
+b_{3,\mathrm{ref}} =
+\frac{a_{\mathrm{ref}}^W + g e_3}{\left\|a_{\mathrm{ref}}^W + g e_3\right\|}
+$$
+
+Therefore a hover reference has $a_{\mathrm{ref}}^W=0$ and
+$f_{\mathrm{ref}}^B=g$. If an upstream producer fills the trajectory
+acceleration field with an IMU-like specific force or a thrust command instead
+of a world-frame net acceleration, gravity will be added again and the thrust
+reference will be wrong.
 
 The raw hover-thrust estimate is clamped to:
 
@@ -200,11 +252,19 @@ $$
 
 where $f_c$ is `filter_cutoff_hz`.
 
-This scalar model is intentionally simple. It does not explicitly model large
-maneuver aerodynamics, motor/propeller nonlinearities, thrust saturation,
-allocation limits, attitude-dependent gravity projection, IMU bias, or timestamp
-misalignment between the IMU and thrust command. Those effects appear as model
-error or rejected samples rather than separate states.
+This scalar model is intentionally simple. In reality, the effective gain may
+depend on battery voltage, motor state, propeller efficiency, airspeed, rotor
+inflow, tilt, ground effect, actuator saturation, IMU bias, and timestamp
+misalignment:
+
+$$
+\theta = \theta(t,\mathrm{attitude},\mathrm{airspeed},\mathrm{inflow},\ldots)
+$$
+
+The estimator approximates that behavior as a single slowly varying scalar.
+Large-maneuver or aerodynamic errors should therefore be understood mainly as
+bandwidth/order limits of the $\theta$ estimate, not as a missing attitude
+projection in the PX4 normalization formula.
 
 ## Topics and Parameters
 
