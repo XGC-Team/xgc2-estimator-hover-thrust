@@ -23,15 +23,24 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# ROS adapters are intentionally excluded from this boundary check:
+# - include/hover_thrust_estimator/input and src/input
+# - include/hover_thrust_estimator/output and src/output
+# - hover_thrust_estimator_node and hover_thrust_estimator_main
+# Those layers translate ROS topics/messages into the ROS-free runtime context.
 core_paths=(
-  "${REPO_ROOT}/include/hover_thrust_estimator/hover_thrust_estimator.h"
-  "${REPO_ROOT}/include/hover_thrust_estimator/hover_thrust_estimator_runtime.h"
-  "${REPO_ROOT}/src/hover_thrust_estimator_runtime.cpp"
+  "${REPO_ROOT}/hover_thrust_estimator/include/hover_thrust_estimator/common"
+  "${REPO_ROOT}/hover_thrust_estimator/include/hover_thrust_estimator/state_machine"
+  "${REPO_ROOT}/hover_thrust_estimator/include/hover_thrust_estimator/hover_thrust_estimator.h"
+  "${REPO_ROOT}/hover_thrust_estimator/include/hover_thrust_estimator/hover_thrust_estimator_runtime.h"
+  "${REPO_ROOT}/hover_thrust_estimator/include/hover_thrust_estimator/hover_thrust_output_model.h"
+  "${REPO_ROOT}/hover_thrust_estimator/src/hover_thrust_estimator_runtime.cpp"
+  "${REPO_ROOT}/hover_thrust_estimator/src/state_machine"
 )
 
-ros_source_pattern='(#include[[:space:]]*[<"][^>"]*(ros/|ros\.h|roscpp|rospy|geometry_msgs/|sensor_msgs/|std_msgs/|mavros_msgs/|diagnostic_msgs/|tf2/|tf/)[^>"]*[>"])|(^|[^[:alnum:]_])(ros::|geometry_msgs::|sensor_msgs::|std_msgs::|mavros_msgs::|diagnostic_msgs::|tf2::)'
+ros_source_pattern='(#include[[:space:]]*[<"][^>"]*(ros/|ros\.h|roscpp|rospy|[[:alnum:]_]+_msgs/|diagnostic_msgs/|tf2/|tf/)[^>"]*[>"])|(^|[^[:alnum:]_])(ros::|[[:alnum:]_]+_msgs::|diagnostic_msgs::|tf2::)'
 if grep -RInE "${ros_source_pattern}" "${core_paths[@]}"; then
-  echo "core hover thrust math/runtime files must not depend on ROS APIs or ROS messages" >&2
+  echo "core hover thrust runtime, state, and context files must not depend on ROS APIs or ROS messages; ROS adapters may depend on ROS" >&2
   exit 1
 fi
 

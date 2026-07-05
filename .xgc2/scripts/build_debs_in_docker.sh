@@ -70,13 +70,16 @@ docker run --rm \
       ros-noetic-roscpp \
       ros-noetic-roslaunch \
       ros-noetic-rospack \
+      ros-noetic-rostest \
       ros-noetic-xgc2-ros1-utils \
+      ros-noetic-xgc2-state-machine-msgs \
       ros-noetic-sensor-msgs \
       ros-noetic-std-msgs
 
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
-    mkdir -p /workspace/work/src/hover_thrust_estimator
-    rsync -a --delete /workspace/estimator-hover-thrust/ /workspace/work/src/hover_thrust_estimator/
+    mkdir -p /workspace/work/src/hover-thrust
+    rsync -a --delete /workspace/estimator-hover-thrust/ /workspace/work/src/hover-thrust/
+    python3 /workspace/estimator-hover-thrust/.xgc2/scripts/check_param_contract.py
 
     cd /workspace/work
     set +u
@@ -87,6 +90,9 @@ docker run --rm \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG" \
       -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG"
+
+    /workspace/estimator-hover-thrust/.xgc2/scripts/check_core_libraries.sh \
+      --install-root /workspace/work/install-root
 
     /workspace/estimator-hover-thrust/.xgc2/scripts/package_debs.sh \
       --install-root /workspace/work/install-root \

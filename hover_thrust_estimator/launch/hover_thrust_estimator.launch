@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="ns" default="uav1"/>
+
+    <!-- Defaults come from config/hover_thrust_estimator.yaml; these args allow command-line overrides. -->
+    <arg name="config_file" default="$(find hover_thrust_estimator)/config/hover_thrust_estimator.yaml"/>
+    <arg name="gravity" default="9.8066"/>
+    <arg name="initial_hover_thrust" default="0.3"/>
+    <arg name="rho2" default="0.998"/>
+    <arg name="min_hover_thrust" default="0.15"/>
+    <arg name="max_hover_thrust" default="0.85"/>
+    <arg name="min_altitude" default="0.5"/>
+    <arg name="sample_timeout" default="0.2"/>
+    <arg name="loop_rate" default="1000.0"/>
+    <arg name="publish_rate" default="100.0"/>
+    <arg name="raw_update_rate" default="10.0"/>
+    <arg name="filter_enabled" default="true"/>
+    <arg name="filter_cutoff_hz" default="2.0"/>
+    <arg name="input_rate_low_hz" default="5.0"/>
+    <arg name="imu_topic" default="mavros/imu/data"/>
+    <arg name="target_attitude_topic" default="mavros/setpoint_raw/target_attitude"/>
+    <arg name="altitude_topic" default="mavros/local_position/pose"/>
+    <arg name="estimate_state_topic" default="hover_thrust/estimate_state"/>
+    <arg name="debug_trace_topic" default="hover_thrust/debug/state_machine_trace"/>
+
+    <group ns="$(arg ns)">
+        <node pkg="hover_thrust_estimator"
+              type="hover_thrust_estimator_node"
+              name="hover_thrust_estimator"
+              output="screen"
+              clear_params="true">
+            <!-- Load YAML first, then write arg-backed params so roslaunch arguments override YAML values. -->
+            <rosparam command="load" file="$(arg config_file)"/>
+            <param name="gravity" value="$(arg gravity)"/>
+            <param name="initial_hover_thrust" value="$(arg initial_hover_thrust)"/>
+            <param name="rho2" value="$(arg rho2)"/>
+            <param name="min_hover_thrust" value="$(arg min_hover_thrust)"/>
+            <param name="max_hover_thrust" value="$(arg max_hover_thrust)"/>
+            <param name="min_altitude" value="$(arg min_altitude)"/>
+            <param name="sample_timeout" value="$(arg sample_timeout)"/>
+            <param name="loop_rate" value="$(arg loop_rate)"/>
+            <param name="publish_rate" value="$(arg publish_rate)"/>
+            <param name="raw_update_rate" value="$(arg raw_update_rate)"/>
+            <param name="filter_enabled" value="$(arg filter_enabled)"/>
+            <param name="filter_cutoff_hz" value="$(arg filter_cutoff_hz)"/>
+            <param name="input_rate_low_hz" value="$(arg input_rate_low_hz)"/>
+            <param name="imu_topic" value="$(arg imu_topic)"/>
+            <param name="target_attitude_topic" value="$(arg target_attitude_topic)"/>
+            <param name="altitude_topic" value="$(arg altitude_topic)"/>
+            <param name="estimate_state_topic" value="$(arg estimate_state_topic)"/>
+            <param name="debug_trace_topic" value="$(arg debug_trace_topic)"/>
+        </node>
+    </group>
+</launch>

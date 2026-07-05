@@ -47,7 +47,9 @@ jobs:
             ros-noetic-mavros-msgs \
             ros-noetic-message-generation \
             ros-noetic-roscpp \
+            ros-noetic-rostest \
             ros-noetic-xgc2-ros1-utils \
+            ros-noetic-xgc2-state-machine-msgs \
             ros-noetic-sensor-msgs \
             ros-noetic-std-msgs
 
@@ -90,7 +92,9 @@ jobs:
             ros-noetic-roscpp \
             ros-noetic-roslaunch \
             ros-noetic-rospack \
+            ros-noetic-rostest \
             ros-noetic-xgc2-ros1-utils \
+            ros-noetic-xgc2-state-machine-msgs \
             ros-noetic-sensor-msgs \
             ros-noetic-std-msgs
 
@@ -98,6 +102,7 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git diff --check HEAD
+          python3 .xgc2/scripts/check_param_contract.py
 
       - name: Build package and run launch compliance
         run: |
@@ -105,8 +110,8 @@ jobs:
           work_dir="${RUNNER_TEMP}/estimator-hover-thrust-compliance"
           install_root="${RUNNER_TEMP}/estimator-hover-thrust-install-root"
           rm -rf "$work_dir" "$install_root"
-          mkdir -p "$work_dir/src/hover_thrust_estimator"
-          rsync -a --delete "$GITHUB_WORKSPACE/" "$work_dir/src/hover_thrust_estimator/"
+          mkdir -p "$work_dir/src/hover-thrust"
+          rsync -a --delete "$GITHUB_WORKSPACE/" "$work_dir/src/hover-thrust/"
 
           cd "$work_dir"
           set +u
@@ -117,10 +122,12 @@ jobs:
           DESTDIR="$install_root" catkin_make install \
             -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
             -DCMAKE_BUILD_TYPE=Release
+          "$GITHUB_WORKSPACE/.xgc2/scripts/check_core_libraries.sh" --install-root "$install_root"
           set +u
           source devel/setup.bash
           set -u
-          test "$(rospack find hover_thrust_estimator)" = "$work_dir/src/hover_thrust_estimator"
+          test "$(rospack find hover_thrust_estimator)" = "$work_dir/src/hover-thrust/hover_thrust_estimator"
+          test "$(rospack find hover_thrust_estimator_msgs)" = "$work_dir/src/hover-thrust/hover_thrust_estimator_msgs"
           roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch >/tmp/xgc2-hover-thrust-estimator-files.txt
 
   build-debs:

@@ -31,7 +31,7 @@ require_command rsync
 if git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   mapfile -d '' CXX_FILES < <(
     cd "${REPO_ROOT}"
-    find include src test -type f \
+    find hover_thrust_estimator/include hover_thrust_estimator/src hover_thrust_estimator/test -type f \
       \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o \
         -name '*.h' -o -name '*.hpp' -o -name '*.hh' -o -name '*.hxx' \) \
       -print0 | sort -z
@@ -57,8 +57,8 @@ echo "Running clang-format..."
 
 WORK_DIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/xgc2-hover-thrust-cpp-quality"
 rm -rf "${WORK_DIR}"
-mkdir -p "${WORK_DIR}/src/hover_thrust_estimator"
-rsync -a --delete --exclude '.git' "${REPO_ROOT}/" "${WORK_DIR}/src/hover_thrust_estimator/"
+mkdir -p "${WORK_DIR}/src/hover-thrust"
+rsync -a --delete --exclude '.git' "${REPO_ROOT}/" "${WORK_DIR}/src/hover-thrust/"
 
 echo "Generating compile_commands.json..."
 (
@@ -72,14 +72,14 @@ echo "Generating compile_commands.json..."
 
 echo "Running clang-tidy..."
 TIDY_SOURCES=(
-  "${WORK_DIR}/src/hover_thrust_estimator/src/hover_thrust_estimator_main.cpp"
-  "${WORK_DIR}/src/hover_thrust_estimator/src/hover_thrust_estimator_node.cpp"
-  "${WORK_DIR}/src/hover_thrust_estimator/src/hover_thrust_estimator_runtime.cpp"
+  "${WORK_DIR}/src/hover-thrust/hover_thrust_estimator/src/hover_thrust_estimator_main.cpp"
+  "${WORK_DIR}/src/hover-thrust/hover_thrust_estimator/src/hover_thrust_estimator_node.cpp"
+  "${WORK_DIR}/src/hover-thrust/hover_thrust_estimator/src/hover_thrust_estimator_runtime.cpp"
 )
 
 clang-tidy \
   -p "${WORK_DIR}/build" \
-  -header-filter="^${WORK_DIR}/src/hover_thrust_estimator/(include|src|test)/" \
+  -header-filter="^${WORK_DIR}/src/hover-thrust/hover_thrust_estimator/(include|src|test)/" \
   -quiet \
   "${TIDY_SOURCES[@]}"
 

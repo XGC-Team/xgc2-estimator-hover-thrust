@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<launch>
+    <test pkg="hover_thrust_estimator"
+          type="hover_thrust_estimator_node_params_test"
+          test-name="hover_thrust_estimator_node_params_test"
+          time-limit="10.0">
+        <param name="imu_topic" value="test/imu_data_non_default"/>
+        <param name="target_attitude_topic" value="test/target_attitude_non_default"/>
+        <param name="altitude_topic" value="test/local_position_non_default"/>
+        <param name="estimate_state_topic" value="test/hover_thrust_estimate_non_default"/>
+        <param name="debug_trace_topic" value="test/state_machine_trace_non_default"/>
+
+        <param name="gravity" value="9.91"/>
+        <param name="initial_hover_thrust" value="0.42"/>
+        <param name="rho2" value="0.987"/>
+        <param name="min_hover_thrust" value="0.21"/>
+        <param name="max_hover_thrust" value="0.79"/>
+        <param name="min_altitude" value="1.25"/>
+        <param name="sample_timeout" value="0.35"/>
+
+        <param name="loop_rate" value="123.0"/>
+        <param name="publish_rate" value="45.0"/>
+        <param name="raw_update_rate" value="12.0"/>
+        <param name="input_rate_low_hz" value="7.5"/>
+
+        <param name="filter_enabled" value="false"/>
+        <param name="filter_cutoff_hz" value="4.5"/>
+    </test>
+</launch>

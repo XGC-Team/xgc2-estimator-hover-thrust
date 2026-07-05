@@ -7,17 +7,21 @@ summary: Hover thrust estimation package for PX4/MAVROS UAV controllers.
 ros:
   distro: noetic
   packages:
+  - hover_thrust_estimator_msgs
   - hover_thrust_estimator
 apt:
   distribution: focal
   install:
+  - ros-noetic-xgc2-estimator-hover-thrust-msgs
   - ros-noetic-xgc2-estimator-hover-thrust
   packages:
+  - ros-noetic-xgc2-estimator-hover-thrust-msgs
   - ros-noetic-xgc2-estimator-hover-thrust
   depends:
-  - libxgc2-math-dev (>= 0.5.5-5)
-  - libxgc2-state-machine-dev (>= 0.1.2-5~focal)
+  - libxgc2-math-dev (>= 0.5.6-1)
+  - libxgc2-state-machine-dev (>= 0.1.3-1~focal)
   - ros-noetic-xgc2-ros1-utils
+  - ros-noetic-xgc2-state-machine-msgs
 usage:
   install: 'sudo apt update
 
@@ -29,6 +33,9 @@ usage:
     '
 ownership:
   paths:
+  - /opt/ros/noetic/share/hover_thrust_estimator_msgs
+  - /opt/ros/noetic/include/hover_thrust_estimator_msgs
+  - /opt/ros/noetic/lib/python3/dist-packages/hover_thrust_estimator_msgs
   - /opt/ros/noetic/share/hover_thrust_estimator
   - /opt/ros/noetic/include/hover_thrust_estimator
   - /opt/ros/noetic/lib/hover_thrust_estimator

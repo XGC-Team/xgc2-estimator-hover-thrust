@@ -1,0 +1,21 @@
+imu_topic: "mavros/imu/data"
+target_attitude_topic: "mavros/setpoint_raw/target_attitude"
+altitude_topic: "mavros/local_position/pose"
+estimate_state_topic: "hover_thrust/estimate_state"
+debug_trace_topic: "hover_thrust/debug/state_machine_trace"
+
+gravity: 9.8066
+initial_hover_thrust: 0.3
+rho2: 0.998
+min_hover_thrust: 0.15
+max_hover_thrust: 0.85
+min_altitude: 0.5
+sample_timeout: 0.2
+
+loop_rate: 1000.0
+publish_rate: 100.0
+raw_update_rate: 10.0
+input_rate_low_hz: 5.0
+
+filter_enabled: true
+filter_cutoff_hz: 2.0

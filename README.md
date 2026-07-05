@@ -1,202 +1,203 @@
 # Hover Thrust Estimator
 
-ROS1 package for estimating the normalized hover thrust used by PX4/MAVROS
-multirotor controllers.
+ROS1 packages for estimating normalized hover thrust for PX4/MAVROS multirotor
+controllers. `hover_thrust_estimator_msgs` owns the public message interface;
+`hover_thrust_estimator` owns the estimator implementation.
 
-The estimator subscribes to MAVROS IMU, target attitude thrust, and local pose
-topics. It publishes a latched `hover_thrust_estimator/HoverThrustEstimate`
-message containing the current estimator state, health flags, and filtered
-hover thrust estimate.
+This README focuses on the runtime state model, transition conditions, state
+actions, estimator math, and ROS interface.
 
-## State Model
+## State Machine Model
 
-The runtime state machine has two regions:
+The runtime has two state-machine regions:
 
-- `HEALTH`: one internal state, `HealthMonitor`, that continuously classifies
-  the latest inputs.
-- `ESTIMATION`: four externally visible estimator states.
+- `HEALTH`: evaluates the latest input health condition and emits a health
+  fact event only when that condition changes.
+- `ESTIMATION`: owns the public estimator state published in
+  `HoverThrustEstimate.state`.
 
-Only the four estimation states are exported in `HoverThrustEstimate.state`.
-`HealthMonitor` does not directly set an estimation state. It posts a health
-event, and the estimation region's transition table decides whether the active
-state can consume that event.
+The health event is an event id, not a destination object. It describes a fact
+such as unhealthy input, below-minimum altitude, or estimation-ready input. The
+active child state inside the `ESTIMATION` region consumes the fact according to
+its configured outgoing transitions.
 
-```mermaid
-flowchart LR
-    subgraph HEALTH["HEALTH region"]
-        Input["latest input snapshot"] --> HM["HealthMonitor<br/>classify inputs"]
-        HM --> Event["post internal event<br/>HEALTH_TO_*"]
-    end
+The public estimation states use these message values:
 
-    Event --> Queue["state-machine event queue"]
-    Queue --> Table["transition table lookup<br/>current estimation state + event"]
-
-    subgraph ESTIMATION["ESTIMATION region<br/>public HoverThrustEstimate.state"]
-        Active["currently active child state"]
-        SC["SelfCheck<br/>state = 0<br/>inputs not ready"]
-        G["Ground<br/>state = 1<br/>below min_altitude"]
-        A["Airborne<br/>state = 2<br/>updates RLS"]
-        F["Fault<br/>state = 9<br/>state-machine fault"]
-    end
-
-    Active --> Table
-    Table -->|"matched transition"| SC
-    Table -->|"matched transition"| G
-    Table -->|"matched transition"| A
-    Table -->|"matched transition"| F
-    Table -->|"no matching transition<br/>or same target"| Active
-```
-
-The internal state ids are different from the message values:
-
-| Internal state | Internal id |
+| State | Message value |
 | --- | ---: |
-| `HealthMonitor` | `1` |
-| `SelfCheck` | `10` |
-| `Ground` | `11` |
-| `Airborne` | `12` |
-| `Fault` | `19` |
+| `SelfCheck` | `STATE_SELF_CHECK = 0` |
+| `Ground` | `STATE_GROUND = 1` |
+| `Airborne` | `STATE_AIRBORNE = 2` |
 
-## Health Classification
-
-`HealthMonitor` maps the latest input snapshot to one of the four estimation
-states. The first failing gate wins.
-
-```mermaid
-flowchart TD
-    Start["Latest input snapshot"] --> FaultReq{"fault_requested?"}
-    FaultReq -->|"yes"| Fault["Fault<br/>FLAG_STATE_MACHINE_FAULT"]
-    FaultReq -->|"no"| Missing{"IMU, thrust,<br/>or altitude missing?"}
-
-    Missing -->|"yes"| SelfMissing["SelfCheck<br/>missing input flags"]
-    Missing -->|"no"| TimeJump{"timestamp jump<br/>or backward sample?"}
-
-    TimeJump -->|"yes"| SelfTime["SelfCheck<br/>FLAG_TIME_JUMP"]
-    TimeJump -->|"no"| Stale{"sample age exceeds<br/>sample_timeout?"}
-
-    Stale -->|"yes"| SelfStale["SelfCheck<br/>stale input flags"]
-    Stale -->|"no"| LowRate{"input rate below<br/>input_rate_low_hz?"}
-
-    LowRate -->|"yes"| SelfRate["SelfCheck<br/>FLAG_INPUT_RATE_LOW"]
-    LowRate -->|"no"| Invalid{"non-finite input,<br/>ignored thrust,<br/>or thrust out of range?"}
-
-    Invalid -->|"yes"| SelfInvalid["SelfCheck<br/>invalid input flags"]
-    Invalid -->|"no"| LowAlt{"altitude < min_altitude?"}
-
-    LowAlt -->|"yes"| Ground["Ground<br/>FLAG_BELOW_MIN_ALTITUDE<br/>FLAG_GROUND_HOLD"]
-    LowAlt -->|"no"| Airborne["Airborne<br/>ready for RLS update"]
-```
-
-## Transition Rules
-
-The estimation region follows the health target whenever the target differs
-from the current state. All non-self transitions are explicit:
+State-machine construction, transition, or update failures are not modeled as a
+public estimator state. They are treated as runtime errors because the estimator
+should not continue flying with an undefined state-machine update.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> SelfCheck
+    state "HEALTH region\nedge-triggered health facts" as HEALTH
 
-    SelfCheck --> Ground: HEALTH_TO_GROUND
-    SelfCheck --> Airborne: HEALTH_TO_AIRBORNE
-    SelfCheck --> Fault: HEALTH_TO_FAULT
+    state "ESTIMATION region" as ESTIMATION {
+        state SelfCheck
+        state Ground
+        state Airborne
 
-    Ground --> SelfCheck: HEALTH_TO_SELF_CHECK
-    Ground --> Airborne: HEALTH_TO_AIRBORNE
-    Ground --> Fault: HEALTH_TO_FAULT
+        [*] --> SelfCheck
 
-    Airborne --> SelfCheck: HEALTH_TO_SELF_CHECK
-    Airborne --> Ground: HEALTH_TO_GROUND
-    Airborne --> Fault: HEALTH_TO_FAULT
+        SelfCheck --> Ground: HEALTH_BELOW_MIN_ALTITUDE
+        SelfCheck --> Airborne: HEALTH_ESTIMATION_READY
 
-    Fault --> SelfCheck: HEALTH_TO_SELF_CHECK
-    Fault --> Ground: HEALTH_TO_GROUND
-    Fault --> Airborne: HEALTH_TO_AIRBORNE
+        Ground --> SelfCheck: HEALTH_INPUT_UNHEALTHY
+        Ground --> Airborne: HEALTH_ESTIMATION_READY
 
-    note right of SelfCheck
-      Inputs are not safe for estimation.
-      RLS is not updated.
-    end note
+        Airborne --> SelfCheck: HEALTH_INPUT_UNHEALTHY
+        Airborne --> Ground: HEALTH_BELOW_MIN_ALTITUDE
+    }
 
-    note right of Ground
-      Inputs are healthy, but altitude
-      is below min_altitude.
-      RLS is not updated.
-    end note
-
-    note right of Airborne
-      The only state that updates
-      the raw RLS estimate.
-    end note
+    HEALTH --> ESTIMATION: health fact event
 ```
 
-There are no explicit self-transitions. If the health target is already the
-active estimation state, `HealthMonitor` does not post a transition event.
+The transition table is:
+
+| Current estimation state | `HEALTH_INPUT_UNHEALTHY` | `HEALTH_BELOW_MIN_ALTITUDE` | `HEALTH_ESTIMATION_READY` |
+| --- | --- | --- | --- |
+| `SelfCheck` | no transition | `Ground` | `Airborne` |
+| `Ground` | `SelfCheck` | no transition | `Airborne` |
+| `Airborne` | `SelfCheck` | `Ground` | no transition |
+
+The "no transition" cells are not explicit self-transitions. In normal
+operation the `HEALTH` region also does not re-emit the same condition; it only
+posts a new fact event on a condition edge.
+
+## Health Classification
+
+The `HEALTH` region classifies the latest input snapshot in priority order. The
+first matching condition determines the health condition and the flags published
+with the output. Flags are updated on every evaluation, but a health event is
+posted only when the condition changes.
+
+```mermaid
+flowchart TD
+    Start["latest input snapshot"] --> Missing{"IMU, thrust, or altitude missing?"}
+
+    Missing -->|"yes"| MissingSelf["condition: InputUnhealthy<br/>missing flags"]
+    Missing -->|"no"| TimeJump{"timestamp jump?"}
+
+    TimeJump -->|"yes"| TimeSelf["condition: InputUnhealthy<br/>FLAG_TIME_JUMP"]
+    TimeJump -->|"no"| Stale{"sample age > sample_timeout?"}
+
+    Stale -->|"yes"| StaleSelf["condition: InputUnhealthy<br/>stale flags"]
+    Stale -->|"no"| LowRate{"input rate < input_rate_low_hz?"}
+
+    LowRate -->|"yes"| RateSelf["condition: InputUnhealthy<br/>FLAG_INPUT_RATE_LOW"]
+    LowRate -->|"no"| Invalid{"non-finite input,<br/>ignored thrust,<br/>or thrust out of range?"}
+
+    Invalid -->|"yes"| InvalidSelf["condition: InputUnhealthy<br/>invalid flags"]
+    Invalid -->|"no"| LowAlt{"altitude < min_altitude?"}
+
+    LowAlt -->|"yes"| ToGround["condition: BelowMinAltitude<br/>FLAG_BELOW_MIN_ALTITUDE"]
+    LowAlt -->|"no"| ToAirborne["condition: EstimationReady<br/>ready for estimation"]
+```
+
+Classification rules:
+
+| Priority | Input fact | Health condition | Edge event | Main flags |
+| ---: | --- | --- | --- | --- |
+| 1 | IMU, thrust, or altitude has not been received. | `InputUnhealthy` | `HEALTH_INPUT_UNHEALTHY` | `FLAG_IMU_MISSING`, `FLAG_THRUST_MISSING`, `FLAG_ALTITUDE_MISSING` |
+| 2 | Any sample timestamp jumps into the future or moves backward beyond tolerance. | `InputUnhealthy` | `HEALTH_INPUT_UNHEALTHY` | `FLAG_TIME_JUMP` |
+| 3 | Any sample is older than `sample_timeout`. | `InputUnhealthy` | `HEALTH_INPUT_UNHEALTHY` | `FLAG_IMU_STALE`, `FLAG_THRUST_STALE`, `FLAG_ALTITUDE_STALE` |
+| 4 | Any input stream rate is below `input_rate_low_hz`. | `InputUnhealthy` | `HEALTH_INPUT_UNHEALTHY` | `FLAG_INPUT_RATE_LOW` |
+| 5 | IMU or altitude is non-finite; thrust is ignored, non-finite, `<= 1e-6`, or `> 1.0`. | `InputUnhealthy` | `HEALTH_INPUT_UNHEALTHY` | `FLAG_IMU_INVALID`, `FLAG_THRUST_INVALID`, `FLAG_ALTITUDE_INVALID` |
+| 6 | Altitude is below `min_altitude`. | `BelowMinAltitude` | `HEALTH_BELOW_MIN_ALTITUDE` | `FLAG_BELOW_MIN_ALTITUDE` |
+| 7 | All health checks pass. | `EstimationReady` | `HEALTH_ESTIMATION_READY` | none |
 
 ## State Actions
 
-Each estimation state owns a small action path. Only `Airborne` can update the
-raw RLS estimate; all states can publish an output snapshot when the publish
-gate is due.
+Each estimation state has entry, tick, and exit actions. Only `Airborne`
+updates the raw recursive least-squares estimate.
 
-```mermaid
-flowchart LR
-    SC["SelfCheck"] --> SCEntry["entry:<br/>target = initial_hover_thrust<br/>reset publish gate"]
-    SCEntry --> SCPub{"publish gate due?"}
-    SCPub -->|"yes"| PubSC["publish held / filtered output"]
-    SCPub -->|"no"| HoldSC["hold output"]
+| State | On entry | On tick | On exit |
+| --- | --- | --- | --- |
+| `SelfCheck` | Set output target to `initial_hover_thrust`; reset publish gate. | If the condition is `InputUnhealthy`, record `SelfCheck` output with health flags; publish if `publish_rate` gate is due; do not update RLS. | Reset publish gate. |
+| `Ground` | Freeze current output target; reset publish gate. | If the condition is `BelowMinAltitude`, record `Ground` output with health flags; publish if `publish_rate` gate is due; do not update RLS. | Reset publish gate. |
+| `Airborne` | Reset raw-update gate and publish gate. | If the condition is `EstimationReady`, update RLS when `raw_update_rate` gate is due; set raw estimate as the output target; publish if `publish_rate` gate is due. | Reset raw-update gate and publish gate. |
 
-    G["Ground"] --> GEntry["entry:<br/>freeze current target<br/>reset publish gate"]
-    GEntry --> GPub{"publish gate due?"}
-    GPub -->|"yes"| PubG["publish ground-hold output"]
-    GPub -->|"no"| HoldG["hold output"]
+`Airborne` adds `FLAG_ESTIMATOR_REJECTED` if the RLS update rejects a sample.
+It adds `FLAG_RAW_ESTIMATE_STALE` if the raw-update gate fires while the health
+status is not ready.
 
-    A["Airborne"] --> AEntry["entry:<br/>reset raw-update gate<br/>reset publish gate"]
-    AEntry --> RawGate{"raw-update gate due<br/>and health ready?"}
-    RawGate -->|"yes"| RLS["RLS update:<br/>acc_z + normalized_thrust"]
-    RLS --> Target["raw estimate<br/>becomes output target"]
-    RawGate -->|"no"| SkipRLS["skip RLS update"]
-    Target --> APub{"publish gate due?"}
-    SkipRLS --> APub
-    APub -->|"yes"| PubA["drive output filter<br/>and publish estimate"]
-    APub -->|"no"| HoldA["hold output"]
+## Estimation Math
 
-    F["Fault"] --> FEntry["entry:<br/>reset publish gate"]
-    FEntry --> FPub{"publish gate due?"}
-    FPub -->|"yes"| PubF["publish with<br/>FLAG_STATE_MACHINE_FAULT"]
-    FPub -->|"no"| HoldF["hold output"]
-```
+The estimator fits a scalar thrust-to-acceleration model:
 
-## Estimation Update
+$$
+a_z \approx \theta u
+$$
 
-The raw estimator fits a scalar relation:
+where:
 
-```text
-imu_acc_z ~= thrust_to_acceleration * normalized_thrust
-hover_thrust = gravity / thrust_to_acceleration
-```
+- $a_z$ is IMU linear acceleration along the body z axis.
+- $u$ is MAVROS normalized thrust from `AttitudeTarget.thrust`.
+- $\theta$ is the estimated thrust-to-acceleration gain.
 
-Raw RLS updates are only attempted in `Airborne` and only at
-`raw_update_rate`. The published hover thrust is driven toward the latest raw
-target through the output low-pass model when publishing is due.
+The hover thrust estimate is computed as:
+
+$$
+u_h = \frac{g}{\theta}
+$$
+
+where $g$ is the configured gravity. The raw estimate is clamped to:
+
+$$
+u_h \in [u_{\min}, u_{\max}]
+$$
+
+The RLS forgetting factor is `rho2`. The published estimate is optionally
+low-pass filtered by the output model when publishing is due:
+
+$$
+\hat{u}_{h,\mathrm{pub}} = \mathrm{LPF}(u_{h,\mathrm{raw}}, f_c)
+$$
+
+where $f_c$ is `filter_cutoff_hz`.
 
 ## Topics and Parameters
 
 Default topics:
 
-| Direction | Topic | Type |
-| --- | --- | --- |
-| Subscribe | `mavros/imu/data` | `sensor_msgs/Imu` |
-| Subscribe | `mavros/setpoint_raw/target_attitude` | `mavros_msgs/AttitudeTarget` |
-| Subscribe | `mavros/local_position/pose` | `geometry_msgs/PoseStamped` |
-| Publish | `hover_thrust/estimate_state` | `hover_thrust_estimator/HoverThrustEstimate` |
+| Direction | Topic | Type | Used field |
+| --- | --- | --- | --- |
+| Subscribe | `mavros/imu/data` | `sensor_msgs/Imu` | `linear_acceleration.z` |
+| Subscribe | `mavros/setpoint_raw/target_attitude` | `mavros_msgs/AttitudeTarget` | `thrust`, `type_mask` |
+| Subscribe | `mavros/local_position/pose` | `geometry_msgs/PoseStamped` | `pose.position.z` |
+| Publish | `hover_thrust/estimate_state` | `hover_thrust_estimator_msgs/HoverThrustEstimate` | `state`, `flags`, `hover_thrust` |
+| Publish | `hover_thrust/debug/state_machine_trace` | `state_machine_msgs/StateMachineTrace` | non-periodic internal event and transition trace |
 
-Important timing and gating parameters:
+The estimate topic is the regular runtime interface. The debug trace topic is
+not periodic: it is emitted only when the current update contains an internal
+health event, an internal event consumption, a committed transition, or a
+deferred internal event. Stable input at the main loop rate does not create
+debug trace messages.
 
-| Parameter | Default | Purpose |
+Default parameters:
+
+| Parameter | Default | Meaning |
 | --- | ---: | --- |
-| `sample_timeout` | `0.2` | Maximum sample age before stale flags are set. |
-| `input_rate_low_hz` | `5.0` | Minimum healthy input stream rate. |
-| `min_altitude` | `0.5` | Altitude threshold below which the estimator enters `Ground`. |
+| `gravity` | `9.8066` | Gravity used to convert thrust-to-acceleration gain into hover thrust. |
+| `initial_hover_thrust` | `0.3` | Initial output target and RLS prior. |
+| `rho2` | `0.998` | RLS forgetting factor. |
+| `min_hover_thrust` | `0.15` | Lower clamp for hover thrust. |
+| `max_hover_thrust` | `0.85` | Upper clamp for hover thrust. |
+| `min_altitude` | `0.5` | Altitude gate below which the estimator enters `Ground`. |
+| `sample_timeout` | `0.2` | Maximum allowed sample age before stale flags are set. |
 | `loop_rate` | `1000.0` | Main runtime update loop rate. |
-| `publish_rate` | `100.0` | Estimate-state publish rate. |
+| `publish_rate` | `100.0` | Output publish rate. |
 | `raw_update_rate` | `10.0` | RLS raw-estimate update rate. |
+| `input_rate_low_hz` | `5.0` | Minimum healthy input stream rate. |
+| `filter_enabled` | `true` | Enables output low-pass filtering. |
+| `filter_cutoff_hz` | `2.0` | Output low-pass cutoff frequency. |
+| `imu_topic` | `mavros/imu/data` | IMU input topic. |
+| `target_attitude_topic` | `mavros/setpoint_raw/target_attitude` | MAVROS target attitude input topic. |
+| `altitude_topic` | `mavros/local_position/pose` | Local altitude input topic. |
+| `estimate_state_topic` | `hover_thrust/estimate_state` | Regular estimate output topic. |
+| `debug_trace_topic` | `hover_thrust/debug/state_machine_trace` | Non-periodic state-machine debug trace topic. |
