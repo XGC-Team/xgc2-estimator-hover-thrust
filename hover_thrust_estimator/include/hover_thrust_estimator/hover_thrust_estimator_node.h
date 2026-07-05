@@ -44,7 +44,7 @@ class HoverThrustEstimatorNode {
 
    private:
     void loadParams();
-    void dispatchOutputEvents(const std::vector<::state_machine::Event>& events);
+    void handlePublicationEvents(const std::vector<::state_machine::Event>& events);
 
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;

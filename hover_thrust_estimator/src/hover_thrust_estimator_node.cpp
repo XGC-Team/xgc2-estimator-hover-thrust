@@ -74,8 +74,8 @@ void HoverThrustEstimatorNode::run(double frequency) {
 
         const double now_sec = ros::Time::now().toSec();
         runtime_.update(now_sec);
-        dispatchOutputEvents(runtime_.getStateMachine().currentOutputEvents());
-        dispatchOutputEvents(runtime_.debugOutputEvents(now_sec));
+        handlePublicationEvents(runtime_.getStateMachine().currentOutputEvents());
+        handlePublicationEvents(runtime_.debugOutputEvents(now_sec));
         rate.sleep();
     }
 
@@ -120,7 +120,7 @@ void HoverThrustEstimatorNode::loadParams() {
     config_utils::normalizeLoopAndEstimatorRates(loop_rate_, estimator_config_);
 }
 
-void HoverThrustEstimatorNode::dispatchOutputEvents(
+void HoverThrustEstimatorNode::handlePublicationEvents(
     const std::vector<::state_machine::Event>& events) {
     const auto result = output_event_dispatcher_.dispatch(events);
     logOutputDispatchResult(result);
