@@ -22,7 +22,7 @@ class HoverThrustEstimator {
         double min_hover_thrust{0.15};
         double max_hover_thrust{0.85};
         bool filter_enabled{false};
-        double filter_cutoff_hz{2.0};
+        double filter_cutoff_hz{5.0};
     };
 
     void setConfig(const Config& config) {

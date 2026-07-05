@@ -240,7 +240,7 @@ Default parameters:
 | `raw_update_rate` | `10.0` | RLS raw-estimate update rate. |
 | `input_rate_low_hz` | `5.0` | Minimum healthy input stream rate. |
 | `filter_enabled` | `true` | Enables output low-pass filtering. |
-| `filter_cutoff_hz` | `2.0` | Output low-pass cutoff frequency. |
+| `filter_cutoff_hz` | `5.0` | Output low-pass cutoff frequency. |
 | `imu_topic` | `mavros/imu/data` | IMU input topic. |
 | `target_attitude_topic` | `mavros/setpoint_raw/target_attitude` | MAVROS target attitude input topic. |
 | `altitude_topic` | `mavros/local_position/pose` | Local altitude input topic. |

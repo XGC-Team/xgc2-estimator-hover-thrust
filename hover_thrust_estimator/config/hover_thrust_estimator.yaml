@@ -18,4 +18,4 @@ raw_update_rate: 10.0
 input_rate_low_hz: 5.0
 
 filter_enabled: true
-filter_cutoff_hz: 2.0
+filter_cutoff_hz: 5.0
