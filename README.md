@@ -17,24 +17,34 @@ The runtime state machine has two regions:
 - `ESTIMATION`: four externally visible estimator states.
 
 Only the four estimation states are exported in `HoverThrustEstimate.state`.
+`HealthMonitor` does not directly set an estimation state. It posts a health
+event, and the estimation region's transition table decides whether the active
+state can consume that event.
 
 ```mermaid
 flowchart LR
     subgraph HEALTH["HEALTH region"]
-        HM["HealthMonitor<br/>classify latest input snapshot"]
+        Input["latest input snapshot"] --> HM["HealthMonitor<br/>classify inputs"]
+        HM --> Event["post internal event<br/>HEALTH_TO_*"]
     end
+
+    Event --> Queue["state-machine event queue"]
+    Queue --> Table["transition table lookup<br/>current estimation state + event"]
 
     subgraph ESTIMATION["ESTIMATION region<br/>public HoverThrustEstimate.state"]
-        SC["SelfCheck<br/>state = 0<br/>inputs not ready<br/>publish held output"]
-        G["Ground<br/>state = 1<br/>below min_altitude<br/>freeze target"]
-        A["Airborne<br/>state = 2<br/>healthy and airborne<br/>update RLS"]
-        F["Fault<br/>state = 9<br/>state-machine fault<br/>publish fault flag"]
+        Active["currently active child state"]
+        SC["SelfCheck<br/>state = 0<br/>inputs not ready"]
+        G["Ground<br/>state = 1<br/>below min_altitude"]
+        A["Airborne<br/>state = 2<br/>updates RLS"]
+        F["Fault<br/>state = 9<br/>state-machine fault"]
     end
 
-    HM -->|"HEALTH_TO_SELF_CHECK"| SC
-    HM -->|"HEALTH_TO_GROUND"| G
-    HM -->|"HEALTH_TO_AIRBORNE"| A
-    HM -->|"HEALTH_TO_FAULT"| F
+    Active --> Table
+    Table -->|"matched transition"| SC
+    Table -->|"matched transition"| G
+    Table -->|"matched transition"| A
+    Table -->|"matched transition"| F
+    Table -->|"no matching transition<br/>or same target"| Active
 ```
 
 The internal state ids are different from the message values:
