@@ -74,10 +74,8 @@ void HoverThrustEstimatorNode::run(double frequency) {
 
         const double now_sec = ros::Time::now().toSec();
         runtime_.update(now_sec);
-        auto output_events = runtime_.getStateMachine().currentOutputEvents();
-        const auto debug_events = runtime_.debugOutputEvents(now_sec);
-        output_events.insert(output_events.end(), debug_events.begin(), debug_events.end());
-        dispatchOutputEvents(output_events);
+        dispatchOutputEvents(runtime_.getStateMachine().currentOutputEvents());
+        dispatchOutputEvents(runtime_.debugOutputEvents(now_sec));
         rate.sleep();
     }
 
