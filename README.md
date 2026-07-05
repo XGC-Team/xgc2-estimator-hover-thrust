@@ -157,7 +157,8 @@ where $u$ is MAVROS/PX4 normalized collective thrust from
 $(T/m)$, and $\theta(t)$ is the normalized-thrust-to-specific-thrust gain.
 The MAVROS thrust field is not a physical thrust sensor; it is treated as the
 commanded collective input, and the effective gain absorbs the command-to-actual
-thrust relationship.
+thrust relationship. Nonlinear thrust curves, PX4/mixer limits, motor dynamics,
+and command-to-acceleration delay are not modeled as separate states.
 
 The gain is treated as fixed or slowly time-varying over the estimator window.
 This captures battery voltage drop, propeller efficiency changes, payload
@@ -262,9 +263,12 @@ $$
 $$
 
 The estimator approximates that behavior as a single slowly varying scalar.
-Large-maneuver or aerodynamic errors should therefore be understood mainly as
-bandwidth/order limits of the $\theta$ estimate, not as a missing attitude
-projection in the PX4 normalization formula.
+It also treats the command-to-acceleration path as an instantaneous gain. In
+practice that path can be nonlinear and delayed, so fast thrust changes can
+produce a biased or lagged $\theta$ estimate. Large-maneuver or aerodynamic
+errors should therefore be understood mainly as bandwidth/order limits of the
+$\theta$ estimate, not as a missing attitude projection in the PX4 normalization
+formula.
 
 ## Topics and Parameters
 
