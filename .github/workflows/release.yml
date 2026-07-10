@@ -345,5 +345,4 @@ jobs:
             --target-architecture arm64
 
       - name: Publish to self-hosted APT repository
-        if: ${{ env.APT_REPO_HOST != '' && env.APT_REPO_PORT != '' && env.APT_REPO_SSH_KEY != '' && env.APT_REPO_KNOWN_HOSTS != '' }}
         run: .xgc2/scripts/publish_apt_repo.sh --deb-dir publish
