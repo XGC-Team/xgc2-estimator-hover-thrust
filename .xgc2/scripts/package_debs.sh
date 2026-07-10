@@ -77,7 +77,7 @@ Section: misc
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: XGC2 <apt@example.com>
-Depends: ros-${ROS_DISTRO}-xgc2-estimator-hover-thrust-msgs (>= 1.2.0-1), libxgc2-math-dev (>= 0.5.6-1), libxgc2-state-machine-dev (>= 0.1.3-1~focal), ros-${ROS_DISTRO}-xgc2-ros1-utils, ros-${ROS_DISTRO}-xgc2-state-machine-msgs (>= 1.2.0-1), ros-${ROS_DISTRO}-roscpp, ros-${ROS_DISTRO}-sensor-msgs, ros-${ROS_DISTRO}-geometry-msgs, ros-${ROS_DISTRO}-mavros-msgs
+Depends: ros-${ROS_DISTRO}-xgc2-estimator-hover-thrust-msgs (>= 1.2.0-3), libxgc2-math-dev (>= 0.5.6-5~focal), libxgc2-state-machine-dev (>= 0.1.3-4~focal), ros-${ROS_DISTRO}-xgc2-ros1-utils (>= 1.1.1-3), ros-${ROS_DISTRO}-xgc2-state-machine-msgs (>= 1.2.0-3), ros-${ROS_DISTRO}-roscpp, ros-${ROS_DISTRO}-sensor-msgs, ros-${ROS_DISTRO}-geometry-msgs, ros-${ROS_DISTRO}-mavros-msgs
 Description: XGC2 hover thrust estimation package for PX4/MAVROS UAV controllers
 EOF
 printf 'xgc2-estimator-hover-thrust package\n' > "${estimator_pkg_root}/usr/share/doc/${ESTIMATOR_PACKAGE}/README"
