@@ -41,6 +41,7 @@ test -f "/opt/ros/${ROS_DISTRO}/lib/pkgconfig/hover_thrust_estimator.pc"
 test -f "/opt/ros/${ROS_DISTRO}/lib/python3/dist-packages/hover_thrust_estimator_msgs/msg/_HoverThrustEstimate.py"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_math.so"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so"
+test -x "/opt/ros/${ROS_DISTRO}/lib/hover_thrust_estimator/hover_thrust_estimator_node"
 rosmsg show hover_thrust_estimator_msgs/HoverThrustEstimate | grep -q '^float64 hover_thrust$'
 python3 - <<'PY'
 from hover_thrust_estimator_msgs.msg import HoverThrustEstimate

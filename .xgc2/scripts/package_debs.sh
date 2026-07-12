@@ -82,8 +82,14 @@ Description: XGC2 hover thrust estimation package for PX4/MAVROS UAV controllers
 EOF
 printf 'xgc2-estimator-hover-thrust package\n' > "${estimator_pkg_root}/usr/share/doc/${ESTIMATOR_PACKAGE}/README"
 find "${estimator_pkg_root}" -type d -exec chmod 0755 {} +
-find "${estimator_pkg_root}" -type f -exec chmod 0644 {} +
 chmod 0755 "${estimator_pkg_root}/DEBIAN"
+chmod 0644 "${estimator_pkg_root}/DEBIAN/control" "${estimator_pkg_root}/usr/share/doc/${ESTIMATOR_PACKAGE}/README"
+
+estimator_node="${estimator_pkg_root}${PREFIX}/lib/${ESTIMATOR_ROS_PACKAGE}/hover_thrust_estimator_node"
+if [[ ! -x "${estimator_node}" ]]; then
+  echo "packaged ROS node is not executable: ${estimator_node}" >&2
+  exit 1
+fi
 
 fakeroot dpkg-deb --build "${estimator_pkg_root}" \
   "${OUTPUT_DIR}/${ESTIMATOR_PACKAGE}_${VERSION}_${ARCH}.deb" >/dev/null
