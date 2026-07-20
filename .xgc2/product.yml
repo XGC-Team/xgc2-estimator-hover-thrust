@@ -36,3 +36,9 @@ ownership:
   - /opt/ros/noetic/lib/hover_thrust_estimator
   - /opt/ros/noetic/lib/libhover_thrust_estimator_math.so
   - /opt/ros/noetic/lib/libhover_thrust_estimator_core.so
+release:
+  dependency_policy:
+    libxgc2-math-dev: rebuild
+    libxgc2-state-machine-dev: rebuild
+    xgc2-ros-msgs: rebuild
+    xgc2-ros1-utils: rebuild
