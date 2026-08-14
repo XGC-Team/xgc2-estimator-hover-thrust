@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-DOCKER_IMAGE="${DOCKER_IMAGE:-ros:noetic-ros-base-focal}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-ros-noetic:1.0.0}"
 WORK_DIR="${WORK_DIR:-${REPO_ROOT}/.work/docker}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/debs}"
 INSTALL_CHECK="${INSTALL_CHECK:-true}"
@@ -41,6 +41,9 @@ docker run --rm \
   -e XGC2_APT_OVERLAY_URL="${XGC2_APT_OVERLAY_URL:-}" \
   -e DEBIAN_FRONTEND=noninteractive \
   -e INSTALL_CHECK="${INSTALL_CHECK}" \
+  -e XGC2_APT_COMPONENT="${XGC2_APT_COMPONENT:-}" \
+  -e XGC2_APT_DISTRIBUTION="${XGC2_APT_DISTRIBUTION:-}" \
+  -e XGC2_APT_SOURCE_URL="${XGC2_APT_SOURCE_URL:-}" \
   -v "${REPO_ROOT}:/workspace/estimator-hover-thrust:ro" \
   -v "${WORK_DIR}:/workspace/work" \
   -v "${OUTPUT_DIR}:/workspace/out" \
@@ -49,18 +52,7 @@ docker run --rm \
     set -euo pipefail
 
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y --no-install-recommends ca-certificates
-    echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
-      > /etc/apt/sources.list.d/xgc2.list
-
-      if [[ -n "${XGC2_APT_OVERLAY_URL:-}" ]]; then
-        sed "s#${XGC2_APT_BASE_URL:-https://xgc2.apt.xiaokang.ink}#${XGC2_APT_OVERLAY_URL%/}#g" \
-          /etc/apt/sources.list.d/xgc2.list \
-          > /etc/apt/sources.list.d/00-xgc2-release-train.list
-      fi
-    apt-get update
-    apt-get install -y --no-install-recommends \
+    for pkg in \
       build-essential \
       ca-certificates \
       cmake \
@@ -68,8 +60,6 @@ docker run --rm \
       fakeroot \
       file \
       git \
-      libxgc2-math-dev \
-      libxgc2-state-machine-dev \
       rsync \
       ros-noetic-geometry-msgs \
       ros-noetic-mavros-msgs \
@@ -79,11 +69,22 @@ docker run --rm \
       ros-noetic-rosmsg \
       ros-noetic-rospack \
       ros-noetic-rostest \
-      ros-noetic-xgc2-estimator-hover-thrust-msgs \
-      ros-noetic-xgc2-ros1-utils \
-      ros-noetic-xgc2-state-machine-msgs \
       ros-noetic-sensor-msgs \
       ros-noetic-std-msgs
+    do
+      if ! dpkg -s "${pkg}" >/dev/null 2>&1; then
+        echo "image is missing ${pkg}; use xgc2-build-focal-ros-noetic" >&2
+        exit 1
+      fi
+    done
+
+    /workspace/estimator-hover-thrust/.xgc2/scripts/setup_xgc2_apt_source.sh
+    apt-get install -y --no-install-recommends \
+      libxgc2-math-dev \
+      libxgc2-state-machine-dev \
+      ros-noetic-xgc2-estimator-hover-thrust-msgs \
+      ros-noetic-xgc2-ros1-utils \
+      ros-noetic-xgc2-state-machine-msgs
 
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
     mkdir -p /workspace/work/src/hover-thrust
