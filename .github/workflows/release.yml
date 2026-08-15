@@ -122,15 +122,8 @@ jobs:
 
       - name: Install published XGC2 products
         run: |
-          export DEBIAN_FRONTEND=noninteractive
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          .xgc2/scripts/setup_xgc2_apt_source.sh
-          apt-get install -y --no-install-recommends \
-            libxgc2-math-dev \
-            libxgc2-state-machine-dev \
-            ros-noetic-xgc2-estimator-hover-thrust-msgs \
-            ros-noetic-xgc2-ros1-utils \
-            ros-noetic-xgc2-state-machine-msgs
+          .xgc2/scripts/install_published_products.sh
 
       - name: Run C++ quality gate
         run: .xgc2/scripts/check_cpp_quality.sh
@@ -153,15 +146,8 @@ jobs:
       - name: Install published XGC2 products
         if: inputs.run_source_tests
         run: |
-          export DEBIAN_FRONTEND=noninteractive
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          .xgc2/scripts/setup_xgc2_apt_source.sh
-          apt-get install -y --no-install-recommends \
-            libxgc2-math-dev \
-            libxgc2-state-machine-dev \
-            ros-noetic-xgc2-estimator-hover-thrust-msgs \
-            ros-noetic-xgc2-ros1-utils \
-            ros-noetic-xgc2-state-machine-msgs
+          .xgc2/scripts/install_published_products.sh
 
       - name: Check package metadata
         if: inputs.run_source_tests
@@ -172,30 +158,7 @@ jobs:
 
       - name: Build package and run launch compliance
         if: inputs.run_source_tests
-        run: |
-          set -euo pipefail
-          work_dir="${RUNNER_TEMP}/estimator-hover-thrust-compliance"
-          install_root="${RUNNER_TEMP}/estimator-hover-thrust-install-root"
-          rm -rf "$work_dir" "$install_root"
-          mkdir -p "$work_dir/src/hover-thrust"
-          rsync -a --delete "$GITHUB_WORKSPACE/" "$work_dir/src/hover-thrust/"
-
-          cd "$work_dir"
-          set +u
-          source /opt/ros/noetic/setup.bash
-          set -u
-          catkin_make run_tests_hover_thrust_estimator
-          catkin_test_results
-          DESTDIR="$install_root" catkin_make install \
-            -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
-            -DCMAKE_BUILD_TYPE=Release
-          "$GITHUB_WORKSPACE/.xgc2/scripts/check_core_libraries.sh" --install-root "$install_root"
-          set +u
-          source devel/setup.bash
-          set -u
-          test "$(rospack find hover_thrust_estimator)" = "$work_dir/src/hover-thrust/hover_thrust_estimator"
-          test "$(rospack find hover_thrust_estimator_msgs)" = "/opt/ros/noetic/share/hover_thrust_estimator_msgs"
-          roslaunch --files hover_thrust_estimator hover_thrust_estimator.launch >/tmp/xgc2-hover-thrust-estimator-files.txt
+        run: .xgc2/scripts/run_source_tests.sh
 
   build-debs:
     name: Build debs (${{ matrix.arch }})
