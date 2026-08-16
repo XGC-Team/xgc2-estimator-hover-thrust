@@ -19,28 +19,6 @@ jobs:
     container: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-ros-noetic:1.0.0
     steps:
       - uses: actions/checkout@v4
-  package-compliance:
-    name: Package compliance and tests
-    runs-on: ubuntu-latest
-    container: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-ros-noetic:1.0.0
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-  build-debs:
-    name: Build debs (${{ matrix.arch }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-
 
       - name: Install published XGC2 products
         run: |
@@ -49,7 +27,14 @@ jobs:
 
       - name: Run C++ quality gate
         run: .xgc2/scripts/check_cpp_quality.sh
-
+  package-compliance:
+    name: Package compliance and tests
+    runs-on: ubuntu-latest
+    container: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-ros-noetic:1.0.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Install published XGC2 products
         run: |
@@ -63,6 +48,19 @@ jobs:
 
       - name: Build package and run launch compliance
         run: .xgc2/scripts/run_source_tests.sh
+  build-debs:
+    name: Build debs (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
 
 
       - name: Build and install-check deb package in Docker
