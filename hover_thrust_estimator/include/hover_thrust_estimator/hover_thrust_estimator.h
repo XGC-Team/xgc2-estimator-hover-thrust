@@ -73,13 +73,16 @@ class HoverThrustEstimator {
             return false;
         }
 
-        const auto sample = rls_.update(acc_z, normalized_thrust);
+        // A rejected physical estimate must not change the RLS parameter or covariance.
+        auto candidate_rls = rls_;
+        const auto sample = candidate_rls.update(acc_z, normalized_thrust);
         if (!sample.measurement_accepted) {
             return false;
         }
 
         const double thr2acc = sample.parameter;
         if (std::isfinite(thr2acc) && thr2acc > estimator_limits::kMinimumGravity) {
+            rls_ = candidate_rls;
             raw_hover_thrust_estimate_ =
                 std::clamp(gravity_ / thr2acc, config_.min_hover_thrust, config_.max_hover_thrust);
             const double dt_s = last_time_sec_ > 0.0 ? time_sec - last_time_sec_ : 0.0;

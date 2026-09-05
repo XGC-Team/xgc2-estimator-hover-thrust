@@ -66,6 +66,7 @@ if(CATKIN_ENABLE_TESTING)
 
   catkin_add_gtest(${PROJECT_NAME}_core_test
     test/hover_thrust_estimator_test.cpp
+    test/hover_thrust_rejection_test.cpp
   )
   if(TARGET ${PROJECT_NAME}_core_test)
     target_compile_features(${PROJECT_NAME}_core_test PUBLIC cxx_std_17)
