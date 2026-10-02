@@ -2,6 +2,7 @@
 
 #include <ros1_utils/time_utils.h>
 
+#include <cmath>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -53,12 +54,16 @@ bool HoverThrustOutputConsumer::handle(const ::state_machine::Event& event) {
         return false;
     }
 
-    const ros::Time stamp = ros1_utils::timeSecOrNow(event.timestamp);
-    runtime_.outputModel().driveTowardTarget(stamp.toSec());
-    const HoverThrustOutput output = runtime_.refreshOutputSnapshot();
-    executor_.pushTask(makePublishTask("PublishHoverThrustEstimate", estimate_state_pub_,
-                                       makeEstimateStateMessage(output, stamp)));
-    return true;
+    for (const auto& publication : runtime_.publishedEstimates()) {
+        if (publication.event.timestamp != event.timestamp &&
+            !(std::isnan(publication.event.timestamp) && std::isnan(event.timestamp)))
+            continue;
+        const ros::Time stamp = ros1_utils::timeSecOrNow(publication.stamp_sec);
+        executor_.pushTask(makePublishTask("PublishHoverThrustEstimate", estimate_state_pub_,
+                                           makeEstimateStateMessage(publication.output, stamp)));
+        return true;
+    }
+    return false;
 }
 
 hover_thrust_estimator_msgs::HoverThrustEstimate

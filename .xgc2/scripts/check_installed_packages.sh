@@ -20,6 +20,9 @@ source "/opt/ros/${ROS_DISTRO}/setup.bash"
 set -u
 
 dpkg -s ros-noetic-xgc2-estimator-hover-thrust >/dev/null
+dpkg -s libxgc2-hover-thrust-core0 >/dev/null
+dpkg -s libxgc2-hover-thrust-dev >/dev/null
+dpkg -s xgc2-hover-thrust-native >/dev/null
 dpkg -s ros-noetic-xgc2-estimator-hover-thrust-msgs >/dev/null
 dpkg -s libxgc2-math-dev >/dev/null
 dpkg -s libxgc2-state-machine-dev >/dev/null
@@ -41,6 +44,8 @@ test -f "/opt/ros/${ROS_DISTRO}/lib/pkgconfig/hover_thrust_estimator.pc"
 test -f "/opt/ros/${ROS_DISTRO}/lib/python3/dist-packages/hover_thrust_estimator_msgs/msg/_HoverThrustEstimate.py"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_math.so"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so"
+test -f "/opt/ros/${ROS_DISTRO}/lib/xgc-runtime/plugins/libest_hover_thrust.so"
+test -f "/opt/ros/${ROS_DISTRO}/lib/cmake/HoverThrustEstimator/HoverThrustEstimatorConfig.cmake"
 test -x "/opt/ros/${ROS_DISTRO}/lib/hover_thrust_estimator/hover_thrust_estimator_node"
 rosmsg show hover_thrust_estimator_msgs/HoverThrustEstimate | grep -q '^float64 hover_thrust$'
 python3 - <<'PY'
@@ -63,6 +68,7 @@ while IFS= read -r file; do
   fi
 done < <(find "/opt/ros/${ROS_DISTRO}/lib/hover_thrust_estimator" \
   "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_math.so" \
-  "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so" -type f 2>/dev/null | sort -u)
+  "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so" \
+  "/opt/ros/${ROS_DISTRO}/lib/xgc-runtime/plugins/libest_hover_thrust.so" -type f 2>/dev/null | sort -u)
 
 echo "Installed package check passed"

@@ -38,12 +38,8 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
     output_event_dispatcher_.addConsumer(std::make_unique<HoverThrustDebugTraceConsumer>(
         nh_, output_event_executor_, runtime_, debug_trace_topic_, kRosQueueSize));
 
-    auto post_input_event = [this](::state_machine::Event event, const HoverThrustInput& input) {
-        return runtime_.postInputEvent(std::move(event), input);
-    };
-
     input_producer_ = std::make_unique<HoverThrustInputProducer>(
-        nh_, imu_topic_, target_attitude_topic_, altitude_topic_, kRosQueueSize, post_input_event);
+        nh_, imu_topic_, target_attitude_topic_, altitude_topic_, kRosQueueSize, runtime_);
 
     output_event_executor_.start();
 

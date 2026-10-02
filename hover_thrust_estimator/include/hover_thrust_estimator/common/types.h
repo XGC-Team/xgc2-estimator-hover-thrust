@@ -61,6 +61,9 @@ struct HoverThrustInput {
     HoverThrustSample normalized_thrust;
     HoverThrustSample altitude;
     bool thrust_ignored{true};
+    // A later sample in the same batch cannot erase an earlier clock fault.
+    // Cleared only after a runtime update has observed it; not a wire field.
+    bool batch_time_jump{false};
 };
 
 struct HoverThrustOutput {

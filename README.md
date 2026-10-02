@@ -1,5 +1,65 @@
 # Hover Thrust Estimator
 
+## Shared runtime and transport facades
+
+The domain owns one shared `hover_thrust_estimator_math` runtime library.
+`ingestImu`, `ingestThrust` and `ingestAltitude` own sample periods, finite flags
+and input events. Callers pass the source timestamp and explicit event clock,
+then `update(now)` once after an input batch or on an idle tick. Only the
+existing state-machine publication gates drive the output filter and capture
+`publishedEstimates()`; transport consumers serialize those immutable records.
+The ROS facade handles zero ROS header stamps at its edge. Core and native
+never replace zero stamps with a hidden clock. Default initial thrust remains
+0.3; the existing publish/raw gates, safety limits and estimator are unchanged.
+Native drains preserve each input port's arrival FIFO and merge only queue
+heads. A source clock regression is never globally sorted into a healthy
+sequence. Shared ingestion retains a batch time-jump flag until an update has
+observed it, so a later fresh sample cannot hide the fault. The existing 8192
+time-jump flag and `ready=false` remain the original health outcome; tolerances
+come from the unchanged sample-timing helper.
+
+ROS and native facades link the same library; native ABI input `/1` retains
+port 1 and optional `/2` uses port 4. The latter observes only normalized thrust
+and `IGNORE_THRUST`, preserving the validated rate/attitude payload semantics.
+No estimator source is built by the generic Host repository.
+
+A ROS-free build is explicit:
+
+```sh
+cmake -S hover_thrust_estimator -B build-core -DBUILD_ROS=OFF \
+  -DBUILD_NATIVE=ON -DCMAKE_PREFIX_PATH="$private_prefix" \
+  -DCMAKE_INSTALL_PREFIX="$private_prefix"
+cmake --build build-core -j1
+(cd build-core && ctest --output-on-failure)
+cmake --install build-core
+```
+
+The private prefix must contain the math/state-machine development packages and
+`XgcRuntimeSDK`; native links `XgcRuntime::SDK`. For an explicit source SDK build,
+set `XGC_RUNTIME_SDK_SOURCE_ROOT` to the generic runtime root instead. The SDK
+owns its five canonical headers; no copied ABI header is kept here. Installed
+core consumers use `find_package(HoverThrustEstimator CONFIG REQUIRED)` and
+`HoverThrustEstimator::Runtime`.
+
+The package candidate separates shared runtime (`libxgc2-hover-thrust-core0`),
+headers/CMake target (`libxgc2-hover-thrust-dev`), native transport module
+(`xgc2-hover-thrust-native`) and the existing ROS transport package. Both
+facades require the exact same core package version. The header-only
+`libxgc-runtime-sdk-dev` is a build prerequisite, not a runtime ELF dependency.
+The historical `/opt/ros/noetic` install prefix is retained for compatibility;
+using that directory does not introduce ROS dependencies into the core/native
+ELFs. Local build/package evidence does not establish APT publication.
+
+Core tests include the four existing state-gate regressions. The real ROS/native
+facade test compares every shared publication field, actual ROS message fields,
+zero-header fallback and idle stale-input ticks. The domain-owned seven-case
+real Host regression is `hover_thrust_estimator/native/host_equivalence.rs`;
+run `.xgc2/scripts/check_native_host.sh` with explicit `XGC_RUNTIME_SOURCE_ROOT`,
+`HTE_NATIVE_LIBRARY`, `HTE_REFERENCE_BIN` and a private `HTE_HOST_WORK_DIR`.
+That fixture consumes built domain artifacts and never falls back to compiling
+an estimator from the generic runtime repository.
+
+
 ROS1 packages for estimating normalized hover thrust for PX4/MAVROS multirotor
 controllers. `hover_thrust_estimator_msgs` owns the public message interface;
 `hover_thrust_estimator` owns the estimator implementation.

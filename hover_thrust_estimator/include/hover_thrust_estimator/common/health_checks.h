@@ -28,7 +28,8 @@ inline HoverThrustHealthStatus classify(const HoverThrustInput& input,
         return result;
     }
 
-    if (xgc2_math::sampleTimeJumped(now_sec, input.imu_acc_z.stamp_sec,
+    if (input.batch_time_jump ||
+        xgc2_math::sampleTimeJumped(now_sec, input.imu_acc_z.stamp_sec,
                                     input.imu_acc_z.period_sec) ||
         xgc2_math::sampleTimeJumped(now_sec, input.normalized_thrust.stamp_sec,
                                     input.normalized_thrust.period_sec) ||

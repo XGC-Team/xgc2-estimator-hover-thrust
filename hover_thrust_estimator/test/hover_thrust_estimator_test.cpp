@@ -118,8 +118,8 @@ bool debugTraceHasTransition(const HoverThrustEstimatorRuntime& runtime,
 
 HoverThrustEstimatorRuntime::Output advanceFilterForPublish(HoverThrustEstimatorRuntime& runtime,
                                                             double now_sec) {
-    runtime.outputModel().driveTowardTarget(now_sec);
-    return runtime.refreshOutputSnapshot();
+    (void)now_sec;
+    return runtime.snapshotOutput();
 }
 
 TEST(HoverThrustEstimatorTest, DisabledFilterKeepsEstimateEqualToRawEstimate) {
@@ -239,7 +239,12 @@ TEST(HoverThrustEstimatorRuntimeTest, ReadySamplesMoveToAirborneState) {
     EXPECT_EQ(output.flags, 0u);
     EXPECT_TRUE(output.sample_used);
     EXPECT_GT(output.raw_hover_thrust, 0.3);
-    EXPECT_DOUBLE_EQ(output.hover_thrust, 0.3);
+    // The runtime now owns the publication-time output drive. A facade must
+    // not perform a second drive after receiving this already-filtered value.
+    EXPECT_GT(output.hover_thrust, 0.3);
+    EXPECT_LE(output.hover_thrust, output.raw_hover_thrust);
+    ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
+    EXPECT_DOUBLE_EQ(runtime.publishedEstimates().front().output.hover_thrust, output.hover_thrust);
     EXPECT_DOUBLE_EQ(output.source_stamp_sec, 1.0);
     EXPECT_DOUBLE_EQ(output.last_estimate_stamp_sec, 1.0);
     EXPECT_TRUE(runtime.hasDebugTrace());
@@ -544,6 +549,82 @@ TEST(HoverThrustEstimatorRuntimeTest, RawUpdateIsLimitedToConfiguredRate) {
     EXPECT_EQ(updated_output.state, state_type::Airborne);
     EXPECT_TRUE(updated_output.sample_used);
     EXPECT_DOUBLE_EQ(updated_output.last_estimate_stamp_sec, 1.101);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, IngestOwnsSamplePeriodFiniteAndEventClock) {
+    HoverThrustEstimatorRuntime runtime;
+    ASSERT_TRUE(runtime.ingestImu(9.8, 1.0, 1.0).ok());
+    ASSERT_TRUE(runtime.ingestThrust(0.3, false, 1.0, 1.0).ok());
+    ASSERT_TRUE(runtime.ingestAltitude(1.0, 1.0, 1.0).ok());
+    runtime.update(1.0);
+    ASSERT_TRUE(runtime.ingestImu(std::numeric_limits<double>::quiet_NaN(), 1.01, 1.02).ok());
+    EXPECT_NEAR(runtime.input().imu_acc_z.period_sec, 0.01, 1e-14);
+    EXPECT_DOUBLE_EQ(runtime.input().imu_acc_z.stamp_sec, 1.01);
+    EXPECT_TRUE(runtime.input().imu_acc_z.received);
+    EXPECT_FALSE(runtime.input().imu_acc_z.finite);
+    ASSERT_TRUE(runtime.ingestThrust(0.3, true, 1.01, 1.02).ok());
+    EXPECT_TRUE(runtime.input().thrust_ignored);
+    runtime.update(1.02);
+    EXPECT_EQ(runtime.currentState(), state_type::SelfCheck);
+    EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kThrustInvalid, 0u);
+    EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kImuInvalid, 0u);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, NativeZeroStampHasNoHiddenClockFallback) {
+    HoverThrustEstimatorRuntime runtime;
+    ASSERT_TRUE(runtime.ingestImu(9.8, 0.0, 2.0).ok());
+    EXPECT_DOUBLE_EQ(runtime.input().imu_acc_z.stamp_sec, 0.0);
+    runtime.update(2.0);
+    EXPECT_EQ(runtime.currentState(), state_type::SelfCheck);
+    // Missing other inputs is still unhealthy; core did not silently replace
+    // the source timestamp with now or a wall clock.
+    EXPECT_DOUBLE_EQ(runtime.input().imu_acc_z.stamp_sec, 0.0);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, PublishedOutputDoesNotAdvanceBetweenStateGates) {
+    HoverThrustEstimatorRuntime runtime;
+    postAllInputEvents(runtime, readyInput(0.001, 0.8, 0.5));
+    runtime.update(0.001);
+    ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
+    const auto publication = runtime.publishedEstimates().front();
+    EXPECT_GT(publication.output.hover_thrust, 0.3);
+    runtime.update(0.005);
+    EXPECT_TRUE(runtime.publishedEstimates().empty());
+    EXPECT_DOUBLE_EQ(runtime.snapshotOutput().hover_thrust, publication.output.hover_thrust);
+    EXPECT_DOUBLE_EQ(publication.output.initial_hover_thrust, 0.3);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, SamePortBackwardBatchReportsOriginalTimeJumpFlag) {
+    HoverThrustEstimatorRuntime runtime;
+    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.0, 10.0).ok());
+    ASSERT_TRUE(runtime.ingestThrust(.3, false, 10.0, 10.0).ok());
+    ASSERT_TRUE(runtime.ingestAltitude(1, 10.0, 10.0).ok());
+    runtime.update(10.0);
+    ASSERT_TRUE(runtime.health().ready);
+    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.2, 10.2).ok());
+    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.1, 10.2).ok());
+    runtime.update(10.2);
+    EXPECT_FALSE(runtime.health().ready);
+    EXPECT_EQ(runtime.currentState(), state_type::SelfCheck);
+    EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kTimeJump, 0u);
+    EXPECT_FALSE(runtime.snapshotOutput().sample_used);
+}
+
+TEST(HoverThrustEstimatorRuntimeTest, LaterFreshInputCannotEraseSameBatchBackwardFault) {
+    HoverThrustEstimatorRuntime runtime;
+    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.0, 10.0).ok());
+    ASSERT_TRUE(runtime.ingestThrust(.3, false, 10.0, 10.0).ok());
+    ASSERT_TRUE(runtime.ingestAltitude(1, 10.0, 10.0).ok());
+    runtime.update(10.0);
+    ASSERT_TRUE(runtime.health().ready);
+    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.2, 10.3).ok());
+    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.1, 10.3).ok());
+    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.3, 10.3).ok());
+    EXPECT_GT(runtime.input().imu_acc_z.period_sec, 0);
+    ASSERT_TRUE(runtime.input().batch_time_jump);
+    runtime.update(10.3);
+    EXPECT_FALSE(runtime.health().ready);
+    EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kTimeJump, 0u);
 }
 
 }  // namespace

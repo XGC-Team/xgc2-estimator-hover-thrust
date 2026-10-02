@@ -1,0 +1,4 @@
+<launch>
+  <test test-name="hover_thrust_facade_equivalence" pkg="hover_thrust_estimator"
+        type="hover_thrust_facade_equivalence_test" time-limit="30.0" />
+</launch>

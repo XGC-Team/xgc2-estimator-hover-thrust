@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <xgc2_math/utils/sample_timing.hpp>
 
 #include "hover_thrust_estimator/common/config_utils.h"
 #include "hover_thrust_estimator/state_machine/airborne_state.h"
@@ -48,7 +49,38 @@ void HoverThrustEstimatorRuntime::reset() {
     flags_ = 0;
     last_output_ = makeOutput(state_, flags_, false, health_);
     debug_trace_records_.clear();
+    published_estimates_.clear();
     setupMachine();
+}
+
+sm::Status HoverThrustEstimatorRuntime::ingestSample(Sample& sample, double value, double stamp_sec,
+                                                     double now_sec, sm::EventId event_id) {
+    sample.period_sec =
+        sample.received && std::isfinite(sample.stamp_sec) && std::isfinite(stamp_sec)
+            ? stamp_sec - sample.stamp_sec
+            : 0.0;
+    sample.value = value;
+    sample.stamp_sec = stamp_sec;
+    sample.received = true;
+    sample.finite = std::isfinite(value);
+    input_.batch_time_jump = input_.batch_time_jump ||
+                             xgc2_math::sampleTimeJumped(now_sec, stamp_sec, sample.period_sec);
+    sm::Event event(event_id, sm::EventTimestamp{now_sec});
+    event.category = sm::EventCategory::kInput;
+    return machine_->postEvent(std::move(event));
+}
+
+sm::Status HoverThrustEstimatorRuntime::ingestImu(double value, double stamp, double now) {
+    return ingestSample(input_.imu_acc_z, value, stamp, now, event_type::INPUT_IMU_UPDATED);
+}
+sm::Status HoverThrustEstimatorRuntime::ingestThrust(double value, bool ignored, double stamp,
+                                                     double now) {
+    input_.thrust_ignored = ignored;
+    return ingestSample(input_.normalized_thrust, value, stamp, now,
+                        event_type::INPUT_THRUST_UPDATED);
+}
+sm::Status HoverThrustEstimatorRuntime::ingestAltitude(double value, double stamp, double now) {
+    return ingestSample(input_.altitude, value, stamp, now, event_type::INPUT_ALTITUDE_UPDATED);
 }
 
 sm::Status HoverThrustEstimatorRuntime::postInputEvent(sm::Event event, const Input& input) {
@@ -59,6 +91,7 @@ sm::Status HoverThrustEstimatorRuntime::postInputEvent(sm::Event event, const In
 
 HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double now_sec) {
     current_time_sec_ = now_sec;
+    published_estimates_.clear();
     debug_trace_records_.clear();
     const auto transition_result = machine_->update({64, 64, false});
     appendDebugTrace(HoverThrustDebugTracePhase::kTransitionPass, machine_->currentTrace());
@@ -66,6 +99,16 @@ HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double n
     const auto tick_result = machine_->update({64, 64, true});
     appendDebugTrace(HoverThrustDebugTracePhase::kTickPass, machine_->currentTrace());
     requireOk(tick_result.status, "tick hover thrust estimator states");
+    // Output smoothing is a domain policy driven ONLY by state publication
+    // gates. Every facade serializes these already-driven immutable snapshots.
+    for (const auto& event : machine_->currentOutputEvents()) {
+        if (event.id != output_event_type::PUBLISH_ESTIMATE)
+            continue;
+        const double stamp = std::isfinite(event.timestamp) ? event.timestamp : now_sec;
+        output_model_.driveTowardTarget(stamp);
+        published_estimates_.push_back({event, stamp, refreshOutputSnapshot()});
+    }
+    input_.batch_time_jump = false;
     return last_output_;
 }
 

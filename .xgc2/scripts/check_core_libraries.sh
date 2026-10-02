@@ -60,5 +60,6 @@ check_core_library() {
 }
 
 check_core_library "${PREFIX}/lib/libhover_thrust_estimator_math.so"
+check_core_library "${PREFIX}/lib/xgc-runtime/plugins/libest_hover_thrust.so"
 
 echo "Core library ROS-boundary check passed"

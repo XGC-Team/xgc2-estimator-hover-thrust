@@ -14,9 +14,9 @@ cd "$work_dir"
 set +u
 source /opt/ros/noetic/setup.bash
 set -u
-catkin_make run_tests_hover_thrust_estimator
+catkin_make -j1 -l1 run_tests_hover_thrust_estimator
 catkin_test_results
-DESTDIR="$install_root" catkin_make install \
+DESTDIR="$install_root" catkin_make -j1 -l1 install \
   -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
   -DCMAKE_BUILD_TYPE=Release
 "${SCRIPT_DIR}/check_core_libraries.sh" --install-root "$install_root"

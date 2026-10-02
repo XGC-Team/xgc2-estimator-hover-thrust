@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-estimator-hover-thrust
 name: XGC2 Hover Thrust Estimator
-version: 1.1.24-16
+version: 1.1.24-17
 kind: ros1-apt
 summary: Hover thrust estimation package for PX4/MAVROS UAV controllers.
 ros:
@@ -12,8 +12,14 @@ apt:
   distribution: focal
   install:
   - ros-noetic-xgc2-estimator-hover-thrust
+  - libxgc2-hover-thrust-core0
+  - libxgc2-hover-thrust-dev
+  - xgc2-hover-thrust-native
   packages:
   - ros-noetic-xgc2-estimator-hover-thrust
+  - libxgc2-hover-thrust-core0
+  - libxgc2-hover-thrust-dev
+  - xgc2-hover-thrust-native
   depends:
   - libxgc2-math-dev (>= 0.5.6-6~focal)
   - libxgc2-state-machine-dev (>= 0.1.3-4~focal)
@@ -36,11 +42,18 @@ ownership:
   - /opt/ros/noetic/lib/hover_thrust_estimator
   - /opt/ros/noetic/lib/libhover_thrust_estimator_math.so
   - /opt/ros/noetic/lib/libhover_thrust_estimator_core.so
+  - /opt/ros/noetic/lib/libhover_thrust_estimator_math.so.0
+  - /opt/ros/noetic/lib/libhover_thrust_estimator_math.so.1.1.24
+  - /opt/ros/noetic/lib/cmake/HoverThrustEstimator
+  - /opt/ros/noetic/lib/xgc-runtime/plugins/libest_hover_thrust.so
 release:
+  requires:
+  - libxgc-runtime-sdk-dev
   dependency_policy:
+    libxgc-runtime-sdk-dev: rebuild
     libxgc2-math-dev: rebuild
     libxgc2-state-machine-dev: rebuild
     xgc2-ros-msgs: rebuild
     xgc2-ros1-utils: rebuild
   apt_versions:
-    focal: 1.1.24-16
+    focal: 1.1.24-17~focal

@@ -89,7 +89,7 @@ docker run --rm \
     set +u
     source /opt/ros/noetic/setup.bash
     set -u
-    DESTDIR=/workspace/work/install-root catkin_make install \
+    DESTDIR=/workspace/work/install-root catkin_make -j1 -l1 install \
       -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG" \

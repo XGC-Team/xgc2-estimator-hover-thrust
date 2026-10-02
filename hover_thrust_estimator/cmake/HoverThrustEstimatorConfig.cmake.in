@@ -1,0 +1,5 @@
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+find_dependency(xgc2_math CONFIG)
+find_dependency(xgc2_state_machine CONFIG)
+include("${CMAKE_CURRENT_LIST_DIR}/HoverThrustEstimatorTargets.cmake")

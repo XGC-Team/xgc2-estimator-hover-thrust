@@ -31,7 +31,7 @@ require_command rsync
 if git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   mapfile -d '' CXX_FILES < <(
     cd "${REPO_ROOT}"
-    find hover_thrust_estimator/include hover_thrust_estimator/src hover_thrust_estimator/test -type f \
+    find hover_thrust_estimator/include hover_thrust_estimator/src hover_thrust_estimator/test hover_thrust_estimator/native -type f \
       \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o \
         -name '*.h' -o -name '*.hpp' -o -name '*.hh' -o -name '*.hxx' \) \
       -print0 | sort -z
@@ -63,7 +63,7 @@ rsync -a --delete --exclude '.git' "${REPO_ROOT}/" "${WORK_DIR}/src/hover-thrust
 echo "Generating compile_commands.json..."
 (
   cd "${WORK_DIR}"
-  catkin_make \
+  catkin_make -j1 -l1 \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DCMAKE_BUILD_TYPE=Debug
 )

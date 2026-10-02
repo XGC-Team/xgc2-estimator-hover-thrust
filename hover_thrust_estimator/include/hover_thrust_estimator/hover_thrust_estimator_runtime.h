@@ -19,6 +19,11 @@ class HoverThrustEstimatorRuntime {
     using Output = HoverThrustOutput;
     using HealthStatus = HoverThrustHealthStatus;
     using DebugTraceRecord = HoverThrustDebugTraceRecord;
+    struct PublishedEstimate {
+        ::state_machine::Event event;
+        double stamp_sec;
+        Output output;
+    };
 
     HoverThrustEstimatorRuntime();
     HoverThrustEstimatorRuntime(const HoverThrustEstimatorRuntime&) = delete;
@@ -27,12 +32,23 @@ class HoverThrustEstimatorRuntime {
     void setConfig(const Config& config);
     void reset();
     ::state_machine::Status postInputEvent(::state_machine::Event event, const Input& input);
+    // Source stamp controls sample period/freshness; now is the caller's
+    // processing clock for the input event. No clock or zero-stamp fallback
+    // exists in this ROS-free runtime. These methods enqueue; update(now)
+    // advances the domain once after the caller's input batch.
+    ::state_machine::Status ingestImu(double acceleration_z, double stamp_sec, double now_sec);
+    ::state_machine::Status ingestThrust(double normalized_thrust, bool ignored, double stamp_sec,
+                                         double now_sec);
+    ::state_machine::Status ingestAltitude(double altitude, double stamp_sec, double now_sec);
     Output update(double now_sec);
     Output output(double now_sec) const;
     Output snapshotOutput() const {
         return last_output_;
     }
     Output refreshOutputSnapshot();
+    const std::vector<PublishedEstimate>& publishedEstimates() const {
+        return published_estimates_;
+    }
     ::state_machine::StateMachine& getStateMachine() {
         return *machine_;
     }
@@ -86,6 +102,8 @@ class HoverThrustEstimatorRuntime {
    private:
     void setupMachine();
     void applyInputEvent(const Input& input);
+    ::state_machine::Status ingestSample(Sample& sample, double value, double stamp_sec,
+                                         double now_sec, ::state_machine::EventId event_id);
     void appendDebugTrace(HoverThrustDebugTracePhase phase,
                           const std::vector<::state_machine::EventTraceRecord>& trace);
     static bool isDebugTraceRecordInteresting(const ::state_machine::EventTraceRecord& record);
@@ -105,6 +123,7 @@ class HoverThrustEstimatorRuntime {
     bool last_sample_used_{false};
     Output last_output_{};
     std::vector<DebugTraceRecord> debug_trace_records_;
+    std::vector<PublishedEstimate> published_estimates_;
 };
 
 }  // namespace hover_thrust_estimator
