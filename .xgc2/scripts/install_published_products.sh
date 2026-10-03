@@ -7,10 +7,11 @@ export DEBIAN_FRONTEND=noninteractive
 "${SCRIPT_DIR}/setup_xgc2_apt_source.sh"
 apt-get install -y --no-install-recommends \
   libxgc2-runtime-sdk-dev \
+  libxgc2-robotics-interfaces-dev \
   libxgc2-math-dev \
   libxgc2-state-machine-dev \
   ros-noetic-xgc2-estimator-hover-thrust-msgs \
   ros-noetic-xgc2-ros1-utils \
   ros-noetic-xgc2-state-machine-msgs
 
-dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libxgc2-runtime-sdk-dev)" ge 0.1.0-1~focal
+dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libxgc2-runtime-sdk-dev)" ge 0.1.0-2~focal

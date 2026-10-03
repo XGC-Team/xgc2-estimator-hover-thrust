@@ -72,3 +72,14 @@ done < <(find "/opt/ros/${ROS_DISTRO}/lib/hover_thrust_estimator" \
   "/opt/ros/${ROS_DISTRO}/lib/xgc-runtime/plugins/libest_hover_thrust.so" -type f 2>/dev/null | sort -u)
 
 echo "Installed package check passed"
+
+WIRE_PATHS=(
+  "/opt/ros/${ROS_DISTRO}/include/hover_thrust_estimator/native/hover_thrust_wire.h"
+  "/opt/ros/${ROS_DISTRO}/share/cmake/HoverThrustNativeWire/HoverThrustNativeWireConfig.cmake"
+  "/opt/ros/${ROS_DISTRO}/share/cmake/HoverThrustNativeWire/HoverThrustNativeWireConfigVersion.cmake"
+  "/opt/ros/${ROS_DISTRO}/share/cmake/HoverThrustNativeWire/HoverThrustNativeWireTargets.cmake"
+)
+for path in "${WIRE_PATHS[@]}"; do
+  test -f "${path}"
+  dpkg-query -S "${path}" | grep -Fxq "libxgc2-hover-thrust-dev: ${path}"
+done

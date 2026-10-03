@@ -19,6 +19,18 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "$INSTALL_ROOT" && -n "$OUTPUT_DIR" ]] || { echo '--install-root and --output-dir required' >&2; exit 2; }
 ARCH="$(dpkg --print-architecture)"
+WIRE_PATHS=(
+  "${PREFIX}/include/hover_thrust_estimator/native/hover_thrust_wire.h"
+  "${PREFIX}/share/cmake/HoverThrustNativeWire/HoverThrustNativeWireConfig.cmake"
+  "${PREFIX}/share/cmake/HoverThrustNativeWire/HoverThrustNativeWireConfigVersion.cmake"
+  "${PREFIX}/share/cmake/HoverThrustNativeWire/HoverThrustNativeWireTargets.cmake"
+)
+for path in "${WIRE_PATHS[@]}"; do
+  [[ -f "${INSTALL_ROOT}${path}" ]] || {
+    echo "missing required installed owning DTO export: ${path}" >&2
+    exit 1
+  }
+done
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$OUTPUT_DIR"
@@ -55,6 +67,7 @@ printf 'Breaks: %s (<< %s)\nReplaces: %s (<< %s)\n' "$ros" "$old_boundary" "$ros
 printf 'libhover_thrust_estimator_math 0 %s (= %s)\n' "$core" "$VERSION" > "$WORK/$core/DEBIAN/shlibs"
 copy_required "$PREFIX/lib/libhover_thrust_estimator_math.so" "$dev"
 copy_required "$PREFIX/lib/cmake/HoverThrustEstimator" "$dev"
+for path in "${WIRE_PATHS[@]}"; do copy_required "$path" "$dev"; done
 for component in common state_machine; do copy_required "$PREFIX/include/hover_thrust_estimator/$component" "$dev"; done
 for header in hover_thrust_estimator.h hover_thrust_estimator_runtime.h hover_thrust_output_model.h; do copy_required "$PREFIX/include/hover_thrust_estimator/$header" "$dev"; done
 control "$dev" "$core (= $VERSION), libxgc2-math-dev (>= 0.5.6-6~focal), libxgc2-state-machine-dev (>= 0.1.3-4~focal)" 'XGC2 hover-thrust domain C++ headers and CMake target' libdevel
