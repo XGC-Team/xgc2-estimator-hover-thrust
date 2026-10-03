@@ -48,9 +48,9 @@ ownership:
   - /opt/ros/noetic/lib/xgc-runtime/plugins/libest_hover_thrust.so
 release:
   requires:
-  - libxgc-runtime-sdk-dev
+  - libxgc2-runtime-sdk-dev
   dependency_policy:
-    libxgc-runtime-sdk-dev: rebuild
+    libxgc2-runtime-sdk-dev: rebuild
     libxgc2-math-dev: rebuild
     libxgc2-state-machine-dev: rebuild
     xgc2-ros-msgs: rebuild
