@@ -70,17 +70,21 @@ sm::Status HoverThrustEstimatorRuntime::ingestSample(Sample& sample, double valu
     return machine_->postEvent(std::move(event));
 }
 
-sm::Status HoverThrustEstimatorRuntime::ingestImu(double value, double stamp, double now) {
-    return ingestSample(input_.imu_acc_z, value, stamp, now, event_type::INPUT_IMU_UPDATED);
+sm::Status HoverThrustEstimatorRuntime::ingestImu(double acceleration_z, double stamp_sec,
+                                                  double now_sec) {
+    return ingestSample(input_.imu_acc_z, acceleration_z, stamp_sec, now_sec,
+                        event_type::INPUT_IMU_UPDATED);
 }
-sm::Status HoverThrustEstimatorRuntime::ingestThrust(double value, bool ignored, double stamp,
-                                                     double now) {
+sm::Status HoverThrustEstimatorRuntime::ingestThrust(double normalized_thrust, bool ignored,
+                                                     double stamp_sec, double now_sec) {
     input_.thrust_ignored = ignored;
-    return ingestSample(input_.normalized_thrust, value, stamp, now,
+    return ingestSample(input_.normalized_thrust, normalized_thrust, stamp_sec, now_sec,
                         event_type::INPUT_THRUST_UPDATED);
 }
-sm::Status HoverThrustEstimatorRuntime::ingestAltitude(double value, double stamp, double now) {
-    return ingestSample(input_.altitude, value, stamp, now, event_type::INPUT_ALTITUDE_UPDATED);
+sm::Status HoverThrustEstimatorRuntime::ingestAltitude(double altitude, double stamp_sec,
+                                                       double now_sec) {
+    return ingestSample(input_.altitude, altitude, stamp_sec, now_sec,
+                        event_type::INPUT_ALTITUDE_UPDATED);
 }
 
 sm::Status HoverThrustEstimatorRuntime::postInputEvent(sm::Event event, const Input& input) {
@@ -102,8 +106,9 @@ HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double n
     // Output smoothing is a domain policy driven ONLY by state publication
     // gates. Every facade serializes these already-driven immutable snapshots.
     for (const auto& event : machine_->currentOutputEvents()) {
-        if (event.id != output_event_type::PUBLISH_ESTIMATE)
+        if (event.id != output_event_type::PUBLISH_ESTIMATE) {
             continue;
+        }
         const double stamp = std::isfinite(event.timestamp) ? event.timestamp : now_sec;
         output_model_.driveTowardTarget(stamp);
         published_estimates_.push_back({event, stamp, refreshOutputSnapshot()});
