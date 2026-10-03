@@ -23,6 +23,8 @@
 // time_source "input" drives the runtime clock from sample stamps only (for
 // replay and deterministic tests); "session" (default) uses Session time.
 
+#include <xgc-robotics-interfaces/robotics_interfaces_v1.h>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -37,7 +39,6 @@
 #include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
 #include "hover_thrust_estimator/native/hover_thrust_wire.h"
 #include "xgc_rt.h"
-#include <xgc-robotics-interfaces/robotics_interfaces_v1.h>
 
 namespace {
 

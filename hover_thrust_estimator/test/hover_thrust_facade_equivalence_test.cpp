@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include <ros/master.h>
 #include <ros/ros.h>
+#include <xgc-robotics-interfaces/robotics_interfaces_v1.h>
 
 #include <array>
 #include <cmath>
@@ -14,10 +15,9 @@
 #include <vector>
 
 #include "hover_thrust_estimator/input/hover_thrust_input_producer.h"
-#include "hover_thrust_estimator/output/hover_thrust_output_consumer.h"
 #include "hover_thrust_estimator/native/hover_thrust_wire.h"
+#include "hover_thrust_estimator/output/hover_thrust_output_consumer.h"
 #include "xgc_rt.h"
-#include <xgc-robotics-interfaces/robotics_interfaces_v1.h>
 
 namespace hte = hover_thrust_estimator;
 namespace {
