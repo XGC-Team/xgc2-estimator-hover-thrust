@@ -63,12 +63,13 @@ rsync -a --delete --exclude '.git' "${REPO_ROOT}/" "${WORK_DIR}/src/hover-thrust
 echo "Generating compile_commands.json..."
 (
   cd "${WORK_DIR}"
-  catkin_make -j1 -l1 \
+  catkin_make -j1 -l1 install \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DCMAKE_INSTALL_INCLUDEDIR=include -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_DATADIR=share \
     -DCMAKE_BUILD_TYPE=Debug
 )
 
-"${REPO_ROOT}/.xgc2/scripts/check_core_libraries.sh" --prefix "${WORK_DIR}/devel"
+"${REPO_ROOT}/.xgc2/scripts/check_core_libraries.sh" --prefix "${WORK_DIR}/install"
 
 echo "Running clang-tidy..."
 TIDY_SOURCES=(
