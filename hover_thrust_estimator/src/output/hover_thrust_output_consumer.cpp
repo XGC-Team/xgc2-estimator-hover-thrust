@@ -10,6 +10,7 @@
 
 #include "hover_thrust_estimator/common/event_types.h"
 #include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
+#include "hover_thrust_estimator/native/hover_thrust_wire.h"
 
 namespace hover_thrust_estimator {
 namespace {
@@ -70,10 +71,20 @@ hover_thrust_estimator_msgs::HoverThrustEstimate
 HoverThrustOutputConsumer::makeEstimateStateMessage(const HoverThrustOutput& output,
                                                     const ros::Time& stamp) const {
     hover_thrust_estimator_msgs::HoverThrustEstimate msg;
+    hover_thrust_native::xgc_hover_thrust_v1 wire{};
+    wire.stamp = stamp.toSec();
+    wire.hover_thrust = output.hover_thrust;
+    wire.raw_hover_thrust = output.raw_hover_thrust;
+    wire.initial_hover_thrust = output.initial_hover_thrust;
+    wire.thrust_to_acceleration = output.thrust_to_acceleration;
+    wire.last_estimate_stamp = output.last_estimate_stamp_sec;
+    wire.state = output.state;
+    wire.flags = output.flags;
+    wire.sample_used = output.sample_used ? 1u : 0u;
     msg.header.stamp = stamp;
-    msg.state = toMessageState(output.state);
-    msg.flags = output.flags;
-    msg.hover_thrust = output.hover_thrust;
+    msg.state = toMessageState(wire.state);
+    msg.flags = wire.flags;
+    msg.hover_thrust = wire.hover_thrust;
     return msg;
 }
 

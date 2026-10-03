@@ -35,8 +35,9 @@
 
 #include "flat_config.hpp"
 #include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
+#include "hover_thrust_estimator/native/hover_thrust_wire.h"
 #include "xgc_rt.h"
-#include "xgc_schemas_v1.h"
+#include <xgc-robotics-interfaces/robotics_interfaces_v1.h>
 
 namespace {
 
@@ -86,7 +87,7 @@ struct EstHoverThrust {
         for (const auto& publication : runtime.publishedEstimates()) {
             const double stamp = publication.stamp_sec;
             const auto& out = publication.output;
-            xgc_hover_thrust_v1 msg{};
+            hover_thrust_native::xgc_hover_thrust_v1 msg{};
             msg.stamp = stamp;
             msg.hover_thrust = out.hover_thrust;
             msg.raw_hover_thrust = out.raw_hover_thrust;

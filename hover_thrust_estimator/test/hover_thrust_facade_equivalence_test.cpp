@@ -15,8 +15,9 @@
 
 #include "hover_thrust_estimator/input/hover_thrust_input_producer.h"
 #include "hover_thrust_estimator/output/hover_thrust_output_consumer.h"
+#include "hover_thrust_estimator/native/hover_thrust_wire.h"
 #include "xgc_rt.h"
-#include "xgc_schemas_v1.h"
+#include <xgc-robotics-interfaces/robotics_interfaces_v1.h>
 
 namespace hte = hover_thrust_estimator;
 namespace {
@@ -25,7 +26,7 @@ struct NativeEndpoint {
     xgc_host_api api{};
     std::array<std::deque<std::vector<uint8_t>>, 5> pending;
     std::vector<uint8_t> payload;
-    std::vector<xgc_hover_thrust_v1> publications;
+    std::vector<hover_thrust_native::xgc_hover_thrust_v1> publications;
     const xgc_plugin_descriptor* descriptor{nullptr};
     void* library{nullptr};
     void* instance{nullptr};
@@ -45,9 +46,9 @@ struct NativeEndpoint {
             return XGC_OK;
         };
         api.publish = [](void* p, uint32_t port, uint64_t, const uint8_t* data, uint32_t len) {
-            if (port != 3 || len != sizeof(xgc_hover_thrust_v1))
+            if (port != 3 || len != sizeof(hover_thrust_native::xgc_hover_thrust_v1))
                 return XGC_ERR;
-            xgc_hover_thrust_v1 output;
+            hover_thrust_native::xgc_hover_thrust_v1 output;
             std::memcpy(&output, data, sizeof output);
             static_cast<NativeEndpoint*>(p)->publications.push_back(output);
             return XGC_OK;

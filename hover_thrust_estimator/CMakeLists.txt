@@ -3,9 +3,9 @@ project(hover_thrust_estimator VERSION 1.1.24 LANGUAGES CXX)
 
 option(BUILD_ROS "Build the ROS1 transport facade" ON)
 option(BUILD_NATIVE "Build the xgc-runtime transport facade" ON)
-set(XGC_RUNTIME_SDK_SOURCE_ROOT "" CACHE PATH "Explicit runtime source root for a source SDK build")
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
+add_subdirectory(wire)
 find_package(xgc2_math REQUIRED CONFIG)
 find_package(xgc2_state_machine REQUIRED CONFIG)
 
@@ -24,16 +24,12 @@ target_link_libraries(hover_thrust_estimator_math PUBLIC
   xgc2_math::math xgc2_state_machine::state_machine)
 
 if(BUILD_NATIVE)
-  if(NOT TARGET XgcRuntime::SDK)
-    if(XGC_RUNTIME_SDK_SOURCE_ROOT)
-      add_subdirectory("${XGC_RUNTIME_SDK_SOURCE_ROOT}/abi" "${CMAKE_CURRENT_BINARY_DIR}/runtime-sdk")
-    else()
-      find_package(XgcRuntimeSDK CONFIG REQUIRED)
-    endif()
-  endif()
+  find_package(XgcRuntimeSDK CONFIG REQUIRED)
+  find_package(XgcRoboticsInterfaces 0.1 CONFIG REQUIRED)
   add_library(hover_thrust_estimator_native MODULE native/est_hover_thrust.cpp)
   target_link_libraries(hover_thrust_estimator_native PRIVATE
-    HoverThrustEstimator::Runtime XgcRuntime::SDK)
+    HoverThrustEstimator::Runtime XgcRuntime::SDK
+    HoverThrustNative::Wire XgcRoboticsInterfaces::Interfaces)
   set_target_properties(hover_thrust_estimator_native PROPERTIES
     OUTPUT_NAME est_hover_thrust CXX_VISIBILITY_PRESET hidden
     INSTALL_RPATH "$ORIGIN/../..")
@@ -61,6 +57,7 @@ if(BUILD_ROS)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> ${catkin_INCLUDE_DIRS})
   target_link_libraries(hover_thrust_estimator_core PUBLIC
     HoverThrustEstimator::Runtime ${catkin_LIBRARIES})
+  target_link_libraries(hover_thrust_estimator_core PRIVATE HoverThrustNative::Wire)
   add_executable(hover_thrust_estimator_node src/hover_thrust_estimator_main.cpp)
   add_dependencies(hover_thrust_estimator_node ${catkin_EXPORTED_TARGETS})
   target_link_libraries(hover_thrust_estimator_node PRIVATE hover_thrust_estimator_core)
@@ -121,7 +118,8 @@ if(BUILD_TESTING)
       add_executable(hover_thrust_facade_equivalence_test test/hover_thrust_facade_equivalence_test.cpp)
     endif()
     target_link_libraries(hover_thrust_facade_equivalence_test
-      hover_thrust_estimator_core XgcRuntime::SDK ${hte_gtest} dl pthread)
+      hover_thrust_estimator_core XgcRuntime::SDK HoverThrustNative::Wire
+      XgcRoboticsInterfaces::Interfaces ${hte_gtest} dl pthread)
     target_compile_definitions(hover_thrust_facade_equivalence_test PRIVATE
       HTE_NATIVE_MODULE_PATH="$<TARGET_FILE:hover_thrust_estimator_native>")
     add_dependencies(hover_thrust_facade_equivalence_test hover_thrust_estimator_native)
