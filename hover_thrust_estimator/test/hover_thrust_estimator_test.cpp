@@ -570,7 +570,7 @@ TEST(HoverThrustEstimatorRuntimeTest, IngestOwnsSamplePeriodFiniteAndEventClock)
     EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kImuInvalid, 0u);
 }
 
-TEST(HoverThrustEstimatorRuntimeTest, NativeZeroStampHasNoHiddenClockFallback) {
+TEST(HoverThrustEstimatorRuntimeTest, ZeroStampHasNoHiddenClockFallback) {
     HoverThrustEstimatorRuntime runtime;
     ASSERT_TRUE(runtime.ingestImu(9.8, 0.0, 2.0).ok());
     EXPECT_DOUBLE_EQ(runtime.input().imu_acc_z.stamp_sec, 0.0);

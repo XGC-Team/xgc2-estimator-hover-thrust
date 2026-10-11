@@ -1,0 +1,4 @@
+<launch>
+  <test test-name="hover_thrust_ros_facade" pkg="hover_thrust_estimator"
+        type="hover_thrust_ros_facade_test" time-limit="30.0" />
+</launch>
