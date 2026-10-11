@@ -103,9 +103,6 @@ docker run --rm \
       --install-root /workspace/work/install-root \
       --output-dir /workspace/out
 
-    /workspace/estimator-hover-thrust/.xgc2/scripts/check_wire_package_payload.sh \
-      /workspace/work/install-root /workspace/out
-
     if [[ "${INSTALL_CHECK}" == "true" ]]; then
       apt-get install -y /workspace/out/*.deb
       /workspace/estimator-hover-thrust/.xgc2/scripts/check_installed_packages.sh

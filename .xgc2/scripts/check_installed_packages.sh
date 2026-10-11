@@ -22,7 +22,6 @@ set -u
 dpkg -s ros-noetic-xgc2-estimator-hover-thrust >/dev/null
 dpkg -s libxgc2-hover-thrust-core0 >/dev/null
 dpkg -s libxgc2-hover-thrust-dev >/dev/null
-dpkg -s xgc2-hover-thrust-native >/dev/null
 dpkg -s ros-noetic-xgc2-estimator-hover-thrust-msgs >/dev/null
 dpkg -s libxgc2-math-dev >/dev/null
 dpkg -s libxgc2-state-machine-dev >/dev/null
@@ -44,7 +43,6 @@ test -f "/opt/ros/${ROS_DISTRO}/lib/pkgconfig/hover_thrust_estimator.pc"
 test -f "/opt/ros/${ROS_DISTRO}/lib/python3/dist-packages/hover_thrust_estimator_msgs/msg/_HoverThrustEstimate.py"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_math.so"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so"
-test -f "/opt/ros/${ROS_DISTRO}/lib/xgc-runtime/plugins/libest_hover_thrust.so"
 test -f "/opt/ros/${ROS_DISTRO}/lib/cmake/HoverThrustEstimator/HoverThrustEstimatorConfig.cmake"
 test -x "/opt/ros/${ROS_DISTRO}/lib/hover_thrust_estimator/hover_thrust_estimator_node"
 rosmsg show hover_thrust_estimator_msgs/HoverThrustEstimate | grep -q '^float64 hover_thrust$'
@@ -68,18 +66,22 @@ while IFS= read -r file; do
   fi
 done < <(find "/opt/ros/${ROS_DISTRO}/lib/hover_thrust_estimator" \
   "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_math.so" \
-  "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so" \
-  "/opt/ros/${ROS_DISTRO}/lib/xgc-runtime/plugins/libest_hover_thrust.so" -type f 2>/dev/null | sort -u)
+  "/opt/ros/${ROS_DISTRO}/lib/libhover_thrust_estimator_core.so" -type f 2>/dev/null | sort -u)
 
 echo "Installed package check passed"
 
-WIRE_PATHS=(
-  "/opt/ros/${ROS_DISTRO}/include/hover_thrust_estimator/native/hover_thrust_wire.h"
-  "/opt/ros/${ROS_DISTRO}/share/cmake/HoverThrustNativeWire/HoverThrustNativeWireConfig.cmake"
-  "/opt/ros/${ROS_DISTRO}/share/cmake/HoverThrustNativeWire/HoverThrustNativeWireConfigVersion.cmake"
-  "/opt/ros/${ROS_DISTRO}/share/cmake/HoverThrustNativeWire/HoverThrustNativeWireTargets.cmake"
-)
-for path in "${WIRE_PATHS[@]}"; do
-  test -f "${path}"
-  dpkg-query -S "${path}" | grep -Fxq "libxgc2-hover-thrust-dev: ${path}"
+# The retired native transport module and its wire header are in no package.
+for path in \
+  "/opt/ros/${ROS_DISTRO}/include/hover_thrust_estimator/native" \
+  "/opt/ros/${ROS_DISTRO}/share/cmake/HoverThrustNativeWire" \
+  "/opt/ros/${ROS_DISTRO}/lib/xgc-runtime/plugins/libest_hover_thrust.so"
+do
+  if [[ -e "${path}" ]]; then
+    echo "retired file is installed: ${path}" >&2
+    exit 1
+  fi
 done
+if dpkg -s xgc2-hover-thrust-native >/dev/null 2>&1; then
+  echo "retired package xgc2-hover-thrust-native is installed" >&2
+  exit 1
+fi
