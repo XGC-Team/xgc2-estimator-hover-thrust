@@ -1,5 +1,7 @@
 #include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -97,9 +99,11 @@ HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double n
     current_time_sec_ = now_sec;
     published_estimates_.clear();
     debug_trace_records_.clear();
-    const auto transition_result = machine_->update({64, 64, false});
-    appendDebugTrace(HoverThrustDebugTracePhase::kTransitionPass, machine_->currentTrace());
-    requireOk(transition_result.status, "update hover thrust estimator transitions");
+    if (machine_->snapshot().inbox_size > 0) {
+        const auto transition_result = machine_->update({64, 64, false});
+        appendDebugTrace(HoverThrustDebugTracePhase::kTransitionPass, machine_->currentTrace());
+        requireOk(transition_result.status, "update hover thrust estimator transitions");
+    }
     const auto tick_result = machine_->update({64, 64, true});
     appendDebugTrace(HoverThrustDebugTracePhase::kTickPass, machine_->currentTrace());
     requireOk(tick_result.status, "tick hover thrust estimator states");
@@ -115,6 +119,16 @@ HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double n
     }
     input_.batch_time_jump = false;
     return last_output_;
+}
+
+::state_machine::adt::TickPolicy HoverThrustEstimatorRuntime::tickPolicy(double nominal_hz) const {
+    const double clamped_nominal_hz =
+        (std::isfinite(nominal_hz) && nominal_hz > 0.0) ? nominal_hz : config_.publish_rate_hz;
+    if (state_ == state_type::Airborne) {
+        return ::state_machine::adt::Policy::rateHz(clamped_nominal_hz);
+    }
+    const double idle_hz = std::min(clamped_nominal_hz, std::max(20.0, config_.publish_rate_hz));
+    return ::state_machine::adt::Policy::rateHz(idle_hz);
 }
 
 HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::output(double now_sec) const {

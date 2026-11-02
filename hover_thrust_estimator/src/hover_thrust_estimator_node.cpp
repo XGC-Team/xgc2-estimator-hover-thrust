@@ -1,7 +1,9 @@
 #include "hover_thrust_estimator/hover_thrust_estimator_node.h"
 
+#include <ros/callback_queue.h>
 #include <ros1_utils/param_utils.h>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <utility>
@@ -64,15 +66,23 @@ void HoverThrustEstimatorNode::run(double frequency) {
         "updating RLS at %.1f Hz",
         loop_frequency, estimator_config_.publish_rate_hz, estimator_config_.raw_update_rate_hz);
 
-    ros::Rate rate(loop_frequency);
+    ros::CallbackQueue* callback_queue = ros::getGlobalCallbackQueue();
+    ::state_machine::adt::AdaptiveScheduleTracker schedule;
     while (ros::ok()) {
-        ros::spinOnce();
-
-        const double now_sec = ros::Time::now().toSec();
-        runtime_.update(now_sec);
-        handlePublicationEvents(runtime_.getStateMachine().currentOutputEvents());
-        handlePublicationEvents(runtime_.debugOutputEvents(now_sec));
-        rate.sleep();
+        const auto policy = runtime_.tickPolicy(loop_frequency);
+        const double wait_sec = std::min(schedule.secondsUntilNextTick(ros::WallTime::now().toSec(), policy), 0.05);
+        callback_queue->callAvailable(ros::WallDuration(wait_sec));
+        if (!ros::ok()) {
+            break;
+        }
+        const double wall_now_sec = ros::WallTime::now().toSec();
+        if (schedule.due(wall_now_sec, policy)) {
+            const double now_sec = ros::Time::now().toSec();
+            runtime_.update(now_sec);
+            handlePublicationEvents(runtime_.getStateMachine().currentOutputEvents());
+            handlePublicationEvents(runtime_.debugOutputEvents(now_sec));
+            schedule.markTick(wall_now_sec);
+        }
     }
 
     ROS_INFO("[HoverThrustEstimatorNode] Estimator loop exited");

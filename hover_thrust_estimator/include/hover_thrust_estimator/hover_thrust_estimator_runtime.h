@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <state_machine/adt.hpp>
 #include <state_machine/state_machine.hpp>
 #include <vector>
 
@@ -41,6 +42,7 @@ class HoverThrustEstimatorRuntime {
                                          double now_sec);
     ::state_machine::Status ingestAltitude(double altitude, double stamp_sec, double now_sec);
     Output update(double now_sec);
+    ::state_machine::adt::TickPolicy tickPolicy(double nominal_hz) const;
     Output output(double now_sec) const;
     Output snapshotOutput() const {
         return last_output_;
