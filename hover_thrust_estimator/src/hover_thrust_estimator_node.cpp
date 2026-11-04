@@ -1,7 +1,9 @@
 #include "hover_thrust_estimator/hover_thrust_estimator_node.h"
 
+#include <ros/callback_queue.h>
 #include <ros1_utils/param_utils.h>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <utility>
@@ -13,18 +15,6 @@ namespace {
 
 constexpr uint32_t kRosQueueSize = 10;
 
-void logOutputDispatchResult(const ::state_machine::runtime::EventDispatchResult& result) {
-    for (const auto& event : result.unhandled_events) {
-        ROS_WARN("[HoverThrustEstimatorNode] Unhandled output event id: %u",
-                 static_cast<unsigned>(event.id));
-    }
-    for (const auto& failure : result.failures) {
-        ROS_WARN("[HoverThrustEstimatorNode] Output consumer '%s' failed on event %u: %s",
-                 failure.consumer_name.c_str(), static_cast<unsigned>(failure.event.id),
-                 failure.message.c_str());
-    }
-}
-
 }  // namespace
 
 HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
@@ -33,10 +23,10 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
 
     runtime_.setConfig(estimator_config_);
 
-    output_event_dispatcher_.addConsumer(std::make_unique<HoverThrustOutputConsumer>(
-        nh_, output_event_executor_, runtime_, estimate_state_topic_, kRosQueueSize));
-    output_event_dispatcher_.addConsumer(std::make_unique<HoverThrustDebugTraceConsumer>(
-        nh_, output_event_executor_, runtime_, debug_trace_topic_, kRosQueueSize));
+    output_consumer_ = std::make_unique<HoverThrustOutputConsumer>(
+        nh_, output_event_executor_, runtime_, estimate_state_topic_, kRosQueueSize);
+    debug_trace_consumer_ = std::make_unique<HoverThrustDebugTraceConsumer>(
+        nh_, output_event_executor_, runtime_, debug_trace_topic_, kRosQueueSize);
 
     input_producer_ = std::make_unique<HoverThrustInputProducer>(
         nh_, imu_topic_, target_attitude_topic_, altitude_topic_, kRosQueueSize, runtime_);
@@ -45,9 +35,9 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
 
     ROS_INFO(
         "[HoverThrustEstimatorNode] Initialized: imu=%s target_attitude=%s pose=%s estimate=%s "
-        "debug_trace=%s loop_rate=%.1f publish_rate=%.1f raw_update_rate=%.1f",
+        "debug_trace=%s publish_rate=%.1f raw_update_rate=%.1f",
         imu_topic_.c_str(), target_attitude_topic_.c_str(), altitude_topic_.c_str(),
-        estimate_state_topic_.c_str(), debug_trace_topic_.c_str(), loop_rate_,
+        estimate_state_topic_.c_str(), debug_trace_topic_.c_str(),
         estimator_config_.publish_rate_hz, estimator_config_.raw_update_rate_hz);
 }
 
@@ -56,26 +46,44 @@ HoverThrustEstimatorNode::~HoverThrustEstimatorNode() {
 }
 
 void HoverThrustEstimatorNode::run(double frequency) {
-    const double loop_frequency =
-        std::isfinite(frequency) && frequency > 0.0 ? frequency : loop_rate_;
-
+    (void)frequency;
     ROS_INFO(
-        "[HoverThrustEstimatorNode] Starting estimator loop at %.1f Hz, publishing at %.1f Hz, "
+        "[HoverThrustEstimatorNode] Starting event/deadline owner loop, publishing at %.1f Hz, "
         "updating RLS at %.1f Hz",
-        loop_frequency, estimator_config_.publish_rate_hz, estimator_config_.raw_update_rate_hz);
+        estimator_config_.publish_rate_hz, estimator_config_.raw_update_rate_hz);
 
-    ros::Rate rate(loop_frequency);
     while (ros::ok()) {
-        ros::spinOnce();
-
         const double now_sec = ros::Time::now().toSec();
-        runtime_.update(now_sec);
-        handlePublicationEvents(runtime_.getStateMachine().currentOutputEvents());
-        handlePublicationEvents(runtime_.debugOutputEvents(now_sec));
-        rate.sleep();
+        const auto wake = runtime_.nextWake(now_sec);
+        const bool deadline_due =
+            !wake.next_deadline_sec || now_sec >= *wake.next_deadline_sec;
+        if (runtime_.hasPendingInput() || deadline_due) {
+            const double update_sec = ros::Time::now().toSec();
+            runtime_.update(update_sec);
+            publishRuntimeOutputs();
+            continue;
+        }
+
+        const double wait_sec = std::max(0.0, *wake.next_deadline_sec - now_sec);
+        ros::getGlobalCallbackQueue()->callAvailable(ros::WallDuration(wait_sec));
     }
 
     ROS_INFO("[HoverThrustEstimatorNode] Estimator loop exited");
+}
+
+void HoverThrustEstimatorNode::publishRuntimeOutputs() {
+    for (const auto& publication : runtime_.publishedEstimates()) {
+        if (!output_consumer_->handle(publication.event)) {
+            ROS_WARN_THROTTLE(1.0,
+                              "[HoverThrustEstimatorNode] Published estimate was not found by its "
+                              "consumer");
+        }
+    }
+
+    const auto& transitions = runtime_.transitionTrace();
+    if (!transitions.empty()) {
+        debug_trace_consumer_->handle(transitions);
+    }
 }
 
 void HoverThrustEstimatorNode::loadParams() {
@@ -114,12 +122,6 @@ void HoverThrustEstimatorNode::loadParams() {
                                 estimator_config_.input_rate_low_hz, "Minimum healthy input rate");
 
     config_utils::normalizeLoopAndEstimatorRates(loop_rate_, estimator_config_);
-}
-
-void HoverThrustEstimatorNode::handlePublicationEvents(
-    const std::vector<::state_machine::Event>& events) {
-    const auto result = output_event_dispatcher_.dispatch(events);
-    logOutputDispatchResult(result);
 }
 
 }  // namespace hover_thrust_estimator

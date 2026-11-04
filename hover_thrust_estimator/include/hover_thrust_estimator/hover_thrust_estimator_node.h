@@ -4,7 +4,6 @@
 
 #include <memory>
 #include <state_machine/runtime/async_task_executor.hpp>
-#include <state_machine/runtime/event_dispatcher.hpp>
 #include <string>
 #include <vector>
 
@@ -44,14 +43,15 @@ class HoverThrustEstimatorNode {
 
    private:
     void loadParams();
-    void handlePublicationEvents(const std::vector<::state_machine::Event>& events);
+    void publishRuntimeOutputs();
 
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
 
     HoverThrustEstimatorRuntime runtime_;
     ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle> output_event_executor_;
-    ::state_machine::runtime::EventDispatcher output_event_dispatcher_;
+    std::unique_ptr<HoverThrustOutputConsumer> output_consumer_;
+    std::unique_ptr<HoverThrustDebugTraceConsumer> debug_trace_consumer_;
     std::unique_ptr<HoverThrustInputProducer> input_producer_;
 
     std::string imu_topic_{"mavros/imu/data"};

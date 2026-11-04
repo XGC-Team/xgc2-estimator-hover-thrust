@@ -8,9 +8,7 @@ find_package(xgc2_math REQUIRED CONFIG)
 find_package(xgc2_state_machine REQUIRED CONFIG)
 
 add_library(hover_thrust_estimator_math SHARED
-  src/hover_thrust_estimator_runtime.cpp
-  src/state_machine/airborne_state.cpp src/state_machine/ground_state.cpp
-  src/state_machine/health_monitor_state.cpp src/state_machine/self_check_state.cpp)
+  src/hover_thrust_estimator_runtime.cpp)
 add_library(HoverThrustEstimator::Runtime ALIAS hover_thrust_estimator_math)
 set_target_properties(hover_thrust_estimator_math PROPERTIES EXPORT_NAME Runtime
   VERSION ${PROJECT_VERSION} SOVERSION 0 INSTALL_RPATH "$ORIGIN")
@@ -54,7 +52,7 @@ endif()
 
 install(TARGETS hover_thrust_estimator_math EXPORT HoverThrustEstimatorTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install(DIRECTORY include/${PROJECT_NAME}/common include/${PROJECT_NAME}/state_machine
+install(DIRECTORY include/${PROJECT_NAME}/common
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
 install(FILES include/${PROJECT_NAME}/hover_thrust_estimator.h
   include/${PROJECT_NAME}/hover_thrust_estimator_runtime.h
@@ -77,10 +75,12 @@ if(BUILD_TESTING)
   if(BUILD_ROS AND CATKIN_ENABLE_TESTING)
     find_package(rostest REQUIRED)
     catkin_add_gtest(hover_thrust_estimator_core_test
-      test/hover_thrust_estimator_test.cpp test/hover_thrust_rejection_test.cpp)
+      test/hover_thrust_estimator_test.cpp test/hover_thrust_rejection_test.cpp
+      test/hover_thrust_runtime_boundary_test.cpp)
   else()
     add_executable(hover_thrust_estimator_core_test
-      test/hover_thrust_estimator_test.cpp test/hover_thrust_rejection_test.cpp)
+      test/hover_thrust_estimator_test.cpp test/hover_thrust_rejection_test.cpp
+      test/hover_thrust_runtime_boundary_test.cpp)
   endif()
   if(TARGET GTest::gtest)
     set(hte_gtest GTest::gtest)

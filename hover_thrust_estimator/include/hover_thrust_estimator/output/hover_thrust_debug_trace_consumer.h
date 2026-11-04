@@ -4,28 +4,27 @@
 #include <state_machine_msgs/StateMachineTrace.h>
 
 #include <state_machine/runtime/async_task_executor.hpp>
-#include <state_machine/runtime/event_dispatcher.hpp>
 #include <string>
+#include <vector>
 
-#include "hover_thrust_estimator/common/types.h"
+#include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
 
 namespace hover_thrust_estimator {
 
-class HoverThrustEstimatorRuntime;
-
-class HoverThrustDebugTraceConsumer final : public ::state_machine::runtime::EventConsumer {
+class HoverThrustDebugTraceConsumer {
    public:
     HoverThrustDebugTraceConsumer(
         ros::NodeHandle& nh, ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle>& executor,
         HoverThrustEstimatorRuntime& runtime, std::string debug_trace_topic, uint32_t queue_size);
 
-    std::string name() const override {
+    std::string name() const {
         return "HoverThrustDebugTraceConsumer";
     }
-    bool handle(const ::state_machine::Event& event) override;
+    bool handle(const std::vector<TransitionTrace>& traces);
 
    private:
-    state_machine_msgs::StateMachineTrace makeTraceMessage(const ros::Time& stamp) const;
+    state_machine_msgs::StateMachineTrace makeTraceMessage(
+        const ros::Time& stamp, const std::vector<TransitionTrace>& traces) const;
 
     ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle>& executor_;
     HoverThrustEstimatorRuntime& runtime_;

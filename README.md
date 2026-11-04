@@ -4,13 +4,16 @@
 
 The domain owns one shared `hover_thrust_estimator_math` runtime library.
 `ingestImu`, `ingestThrust` and `ingestAltitude` own sample periods, finite flags
-and input events. Callers pass the source timestamp and explicit event clock,
-then `update(now)` once after an input batch or on an idle tick. Only the
-existing state-machine publication gates drive the output filter and capture
-`publishedEstimates()`; the ROS output consumer serializes those immutable
-records. The ROS facade handles zero ROS header stamps at its edge. The runtime
-never replaces zero stamps with a hidden clock. Default initial thrust remains
-0.3; the existing publish/raw gates, safety limits and estimator are unchanged.
+and owner-local input marks. Callers pass the source timestamp and explicit
+event clock, then `update(now)` once after an input batch or on an idle wake.
+One causal owner turn evaluates the pending input health marks, evaluates health
+at `now`, applies a condition-edge transition, runs the resulting state's due
+raw/publication actions, and drives the output filter. Only the state-local
+`PeriodicGate`s drive `publishedEstimates()`; the ROS output consumer serializes
+those immutable records. The ROS facade handles zero ROS header stamps at its
+edge. The runtime never replaces zero stamps with a hidden clock. Default initial
+thrust remains 0.3; the existing publish/raw gates, safety limits and estimator
+are unchanged.
 ROS callbacks preserve each input topic's arrival order. A source clock
 regression is never sorted into a healthy sequence. Shared ingestion retains a
 batch time-jump flag until an update has observed it, so a later fresh sample
@@ -39,7 +42,8 @@ package, which requires the exact same core package version. The historical
 directory does not introduce ROS dependencies into the core ELFs. Local
 build/package evidence does not establish APT publication.
 
-Core tests include the four existing state-gate regressions. The ROS facade test
+Core tests retain the estimator, rejection, state-gate and health regressions and
+add runtime boundary coverage for ingestion, publication and wake deadlines. The ROS facade test
 (`hover_thrust_ros_facade_test`) runs the real input producer and output
 consumer on a private ROS master: it checks that a backward stamp is ingested in
 arrival order and raises the time-jump fault, that the published ROS message
@@ -55,17 +59,11 @@ actions, estimator math, and ROS interface.
 
 ## State Machine Model
 
-The runtime has two state-machine regions:
-
-- `HEALTH`: evaluates the latest input health condition and emits a health
-  fact event only when that condition changes.
-- `ESTIMATION`: owns the public estimator state published in
-  `HoverThrustEstimate.state`.
-
-The health event is an event id, not a destination object. It describes a fact
-such as unhealthy input, below-minimum altitude, or estimation-ready input. The
-active child state inside the `ESTIMATION` region consumes the fact according to
-its configured outgoing transitions.
+The runtime owns one `state_machine::adt::AdtMachine<HoverThrustSpec>` with the
+`SelfCheck`, `Ground`, and `Airborne` alternatives. Health classification is an
+owner-turn fact evaluation, not a second state-machine region. The health
+evaluator emits a condition edge only when the condition changes; the active
+alternative consumes that edge according to the transition table below.
 
 The public estimation states use these message values:
 
@@ -75,32 +73,27 @@ The public estimation states use these message values:
 | `Ground` | `STATE_GROUND = 1` |
 | `Airborne` | `STATE_AIRBORNE = 2` |
 
-State-machine construction, transition, or update failures are not modeled as a
-public estimator state. They are treated as runtime errors because the estimator
-should not continue flying with an undefined state-machine update.
+The alternatives own their state-local gates. `SelfCheck` and `Ground` own a
+publish gate; `Airborne` owns a raw-update gate and a publish gate. Entering an
+alternative constructs fresh gates, which is the same phase reset as the old
+state entry. There is no separate health region, old engine event shell, or
+double update.
 
 ```mermaid
 stateDiagram-v2
-    state "HEALTH region\nedge-triggered health facts" as HEALTH
+    [*] --> SelfCheck
+    state SelfCheck
+    state Ground
+    state Airborne
 
-    state "ESTIMATION region" as ESTIMATION {
-        state SelfCheck
-        state Ground
-        state Airborne
+    SelfCheck --> Ground: HEALTH_BELOW_MIN_ALTITUDE
+    SelfCheck --> Airborne: HEALTH_ESTIMATION_READY
 
-        [*] --> SelfCheck
+    Ground --> SelfCheck: HEALTH_INPUT_UNHEALTHY
+    Ground --> Airborne: HEALTH_ESTIMATION_READY
 
-        SelfCheck --> Ground: HEALTH_BELOW_MIN_ALTITUDE
-        SelfCheck --> Airborne: HEALTH_ESTIMATION_READY
-
-        Ground --> SelfCheck: HEALTH_INPUT_UNHEALTHY
-        Ground --> Airborne: HEALTH_ESTIMATION_READY
-
-        Airborne --> SelfCheck: HEALTH_INPUT_UNHEALTHY
-        Airborne --> Ground: HEALTH_BELOW_MIN_ALTITUDE
-    }
-
-    HEALTH --> ESTIMATION: health fact event
+    Airborne --> SelfCheck: HEALTH_INPUT_UNHEALTHY
+    Airborne --> Ground: HEALTH_BELOW_MIN_ALTITUDE
 ```
 
 The transition table is:
@@ -111,16 +104,15 @@ The transition table is:
 | `Ground` | `SelfCheck` | no transition | `Airborne` |
 | `Airborne` | `SelfCheck` | `Ground` | no transition |
 
-The "no transition" cells are not explicit self-transitions. In normal
-operation the `HEALTH` region also does not re-emit the same condition; it only
-posts a new fact event on a condition edge.
+The "no transition" cells are not self-transitions. A condition edge and the
+resulting output/state are observed in the same causal owner turn.
 
 ## Health Classification
 
-The `HEALTH` region classifies the latest input snapshot in priority order. The
+The health evaluator classifies the latest input snapshot in priority order. The
 first matching condition determines the health condition and the flags published
-with the output. Flags are updated on every evaluation, but a health event is
-posted only when the condition changes.
+with the output. Flags are updated on every evaluation, but a condition edge is
+dispatched only when the condition changes.
 
 ```mermaid
 flowchart TD
@@ -159,14 +151,14 @@ Classification rules:
 
 ## State Actions
 
-Each estimation state has entry, tick, and exit actions. Only `Airborne`
-updates the raw recursive least-squares estimate.
+Each alternative handles only its own due work during the owner tick. No state
+owns a second RLS or publication authority.
 
 | State | On entry | On tick | On exit |
 | --- | --- | --- | --- |
-| `SelfCheck` | Set output target to `initial_hover_thrust`; reset publish gate. | If the condition is `InputUnhealthy`, record `SelfCheck` output with health flags; publish if `publish_rate` gate is due; do not update RLS. | Reset publish gate. |
-| `Ground` | Freeze current output target; reset publish gate. | If the condition is `BelowMinAltitude`, record `Ground` output with health flags; publish if `publish_rate` gate is due; do not update RLS. | Reset publish gate. |
-| `Airborne` | Reset raw-update gate and publish gate. | If the condition is `EstimationReady`, update RLS when `raw_update_rate` gate is due; set raw estimate as the output target; publish if `publish_rate` gate is due. | Reset raw-update gate and publish gate. |
+| `SelfCheck` | Set output target to `initial_hover_thrust`; fresh publish gate. | If the condition is `InputUnhealthy`, record `SelfCheck` output with health flags; publish if `publish_rate` gate is due; do not update RLS. | Fresh alternative destruction drops the gate. |
+| `Ground` | Freeze current output target; fresh publish gate. | If the condition is `BelowMinAltitude`, record `Ground` output with health flags; publish if `publish_rate` gate is due; do not update RLS. | Fresh alternative destruction drops the gate. |
+| `Airborne` | Fresh raw-update and publish gates. | If the condition is `EstimationReady`, update RLS when `raw_update_rate` gate is due; set raw estimate as the output target; publish if `publish_rate` gate is due. | Fresh alternative destruction drops both gates. |
 
 `Airborne` adds `FLAG_ESTIMATOR_REJECTED` if the RLS update rejects a sample.
 It adds `FLAG_RAW_ESTIMATE_STALE` if the raw-update gate fires while the health
@@ -326,13 +318,13 @@ Default topics:
 | Subscribe | `mavros/setpoint_raw/target_attitude` | `mavros_msgs/AttitudeTarget` | `thrust`, `type_mask` |
 | Subscribe | `mavros/local_position/pose` | `geometry_msgs/PoseStamped` | `pose.position.z` |
 | Publish | `hover_thrust/estimate_state` | `hover_thrust_estimator_msgs/HoverThrustEstimate` | `state`, `flags`, `hover_thrust` |
-| Publish | `hover_thrust/debug/state_machine_trace` | `state_machine_msgs/StateMachineTrace` | non-periodic internal event and transition trace |
+| Publish | `hover_thrust/debug/state_machine_trace` | `state_machine_msgs/StateMachineTrace` | actual condition-edge transitions only |
 
 The estimate topic is the regular runtime interface. The debug trace topic is
-not periodic: it is emitted only when the current update contains an internal
-health event, an internal event consumption, a committed transition, or a
-deferred internal event. Stable input at the main loop rate does not create
-debug trace messages.
+not periodic: it is emitted only when the current owner turn contains an actual
+condition-edge transition. Tick/empty records and the old engine event shell are
+not published, so stable input and a high publication rate do not create debug
+trace messages.
 
 Default parameters:
 
@@ -345,7 +337,7 @@ Default parameters:
 | `max_hover_thrust` | `0.85` | Upper clamp for hover thrust. |
 | `min_altitude` | `0.5` | Altitude gate below which the estimator enters `Ground`. |
 | `sample_timeout` | `0.2` | Maximum allowed sample age before stale flags are set. |
-| `loop_rate` | `1000.0` | Main runtime update loop rate. |
+| `loop_rate` | `1000.0` | Legacy rate clamp for publish/raw parameters; the ROS owner loop is event/deadline driven and is not a 1000 Hz pump. |
 | `publish_rate` | `100.0` | Output publish rate. |
 | `raw_update_rate` | `10.0` | RLS raw-estimate update rate. |
 | `input_rate_low_hz` | `5.0` | Minimum healthy input stream rate. |

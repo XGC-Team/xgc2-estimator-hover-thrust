@@ -34,22 +34,6 @@ HoverThrustEstimatorRuntime::Input readyInput(double sample_stamp_sec, double ho
     return input;
 }
 
-void postAllInputEvents(HoverThrustEstimatorRuntime& runtime,
-                        const HoverThrustEstimatorRuntime::Input& input) {
-    runtime.postInputEvent(
-        ::state_machine::Event(event_type::INPUT_IMU_UPDATED,
-                               ::state_machine::EventTimestamp{input.normalized_thrust.stamp_sec}),
-        input);
-    runtime.postInputEvent(
-        ::state_machine::Event(event_type::INPUT_THRUST_UPDATED,
-                               ::state_machine::EventTimestamp{input.normalized_thrust.stamp_sec}),
-        input);
-    runtime.postInputEvent(
-        ::state_machine::Event(event_type::INPUT_ALTITUDE_UPDATED,
-                               ::state_machine::EventTimestamp{input.normalized_thrust.stamp_sec}),
-        input);
-}
-
 TEST(HoverThrustEstimatorNodeParamsTest, LoadsAllNonDefaultPrivateParameters) {
     ros::NodeHandle nh;
     HoverThrustEstimatorNode node(nh);
@@ -93,18 +77,17 @@ TEST(HoverThrustDebugTraceConsumerTest, PublishesTraceThroughAsyncExecutor) {
     (void)sub;
 
     HoverThrustEstimatorRuntime runtime;
-    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    ASSERT_TRUE(runtime.applyInput(readyInput(1.0, 0.8, 0.5), 1.0).ok());
     runtime.update(1.0);
-    ASSERT_TRUE(runtime.hasDebugTrace());
+    ASSERT_FALSE(runtime.transitionTrace().empty());
 
     ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle> executor(nh);
     HoverThrustDebugTraceConsumer consumer(nh, executor, runtime, topic, 1);
     executor.start();
     ros::Duration(0.2).sleep();
 
-    const auto events = runtime.debugOutputEvents(1.0);
-    ASSERT_EQ(events.size(), 1u);
-    EXPECT_TRUE(consumer.handle(events.front()));
+    ASSERT_EQ(runtime.transitionTrace().size(), 1u);
+    EXPECT_TRUE(consumer.handle(runtime.transitionTrace()));
 
     const ros::Time deadline = ros::Time::now() + ros::Duration(2.0);
     while (ros::ok() && !received && ros::Time::now() < deadline) {
@@ -114,9 +97,14 @@ TEST(HoverThrustDebugTraceConsumerTest, PublishesTraceThroughAsyncExecutor) {
     executor.stop();
 
     ASSERT_TRUE(received);
-    EXPECT_EQ(received_msg.machine_name, runtime.getStateMachine().name());
+    EXPECT_EQ(received_msg.machine_name, "HoverThrustEstimator");
     EXPECT_FALSE(received_msg.events.empty());
     EXPECT_EQ(received_msg.events.front().event_id, event_type::HEALTH_ESTIMATION_READY);
+    EXPECT_EQ(received_msg.events.front().phase,
+              state_machine_msgs::StateMachineTraceEvent::PHASE_TRANSITION);
+    EXPECT_EQ(received_msg.events.front().kind,
+              state_machine_msgs::StateMachineTraceEvent::KIND_TRANSITION_COMMITTED);
+    EXPECT_EQ(received_msg.update_index, 1u);
 }
 
 }  // namespace

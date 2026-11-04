@@ -85,14 +85,4 @@ struct HoverThrustHealthStatus {
     double source_stamp_sec{0.0};
 };
 
-enum class HoverThrustDebugTracePhase : uint8_t {
-    kTransitionPass = 1,
-    kTickPass = 2,
-};
-
-struct HoverThrustDebugTraceRecord {
-    HoverThrustDebugTracePhase phase{HoverThrustDebugTracePhase::kTransitionPass};
-    ::state_machine::EventTraceRecord trace;
-};
-
 }  // namespace hover_thrust_estimator

@@ -1,25 +1,41 @@
 #include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
 
-#include <stdexcept>
-#include <string>
+#include <cmath>
+#include <limits>
+#include <type_traits>
 #include <utility>
+
 #include <xgc2_math/utils/sample_timing.hpp>
 
 #include "hover_thrust_estimator/common/config_utils.h"
-#include "hover_thrust_estimator/state_machine/airborne_state.h"
-#include "hover_thrust_estimator/state_machine/ground_state.h"
-#include "hover_thrust_estimator/state_machine/health_monitor_state.h"
-#include "hover_thrust_estimator/state_machine/self_check_state.h"
+#include "hover_thrust_estimator/common/health_checks.h"
 
 namespace hover_thrust_estimator {
 namespace {
 
-namespace sm = state_machine;
-
-void requireOk(const sm::Status& status, const char* operation) {
-    if (!status.ok()) {
-        throw std::runtime_error(std::string(operation) + ": " + status.message);
+uint32_t eventIdForCondition(HoverThrustHealthCondition condition) {
+    switch (condition) {
+        case HoverThrustHealthCondition::kInputUnhealthy:
+            return event_type::HEALTH_INPUT_UNHEALTHY;
+        case HoverThrustHealthCondition::kBelowMinAltitude:
+            return event_type::HEALTH_BELOW_MIN_ALTITUDE;
+        case HoverThrustHealthCondition::kEstimationReady:
+            return event_type::HEALTH_ESTIMATION_READY;
     }
+    return event_type::HEALTH_INPUT_UNHEALTHY;
+}
+
+HoverThrustStateId transitionTarget(const HoverThrustTransition& transition) {
+    return std::visit(
+        [](const auto& outcome) -> HoverThrustStateId {
+            using Outcome = std::decay_t<decltype(outcome)>;
+            if constexpr (std::is_same_v<Outcome, ::state_machine::adt::Stay>) {
+                return 0;
+            } else {
+                return std::decay_t<decltype(outcome.value)>::kStateId;
+            }
+        },
+        transition);
 }
 
 }  // namespace
@@ -28,6 +44,8 @@ HoverThrustEstimatorRuntime::HoverThrustEstimatorRuntime() {
     config_utils::normalizeConfig(config_);
     reset();
 }
+
+HoverThrustEstimatorRuntime::~HoverThrustEstimatorRuntime() = default;
 
 void HoverThrustEstimatorRuntime::setConfig(const Config& config) {
     config_ = config;
@@ -42,19 +60,22 @@ void HoverThrustEstimatorRuntime::reset() {
     input_ = Input{};
     health_ = HealthStatus{};
     output_model_.reset(config_);
-    current_time_sec_ = 0.0;
     last_estimate_stamp_sec_ = 0.0;
     last_sample_used_ = false;
-    state_ = state_type::SelfCheck;
     flags_ = 0;
-    last_output_ = makeOutput(state_, flags_, false, health_);
-    debug_trace_records_.clear();
+    machine_ = std::make_unique<Machine>(SelfCheckState{}, 0.0);
+    pending_input_marks_.clear();
+    publication_requests_.clear();
     published_estimates_.clear();
-    setupMachine();
+    transition_trace_.clear();
+    publication_sequence_ = 0;
+    trace_sequence_ = 0;
+    owner_turn_ = 0;
+    last_output_ = makeOutput(currentState(), flags_, false, health_);
 }
 
-sm::Status HoverThrustEstimatorRuntime::ingestSample(Sample& sample, double value, double stamp_sec,
-                                                     double now_sec, sm::EventId event_id) {
+void HoverThrustEstimatorRuntime::ingestSample(Sample& sample, double value, double stamp_sec,
+                                               double now_sec) {
     sample.period_sec =
         sample.received && std::isfinite(sample.stamp_sec) && std::isfinite(stamp_sec)
             ? stamp_sec - sample.stamp_sec
@@ -65,185 +86,226 @@ sm::Status HoverThrustEstimatorRuntime::ingestSample(Sample& sample, double valu
     sample.finite = std::isfinite(value);
     input_.batch_time_jump = input_.batch_time_jump ||
                              xgc2_math::sampleTimeJumped(now_sec, stamp_sec, sample.period_sec);
-    sm::Event event(event_id, sm::EventTimestamp{now_sec});
-    event.category = sm::EventCategory::kInput;
-    return machine_->postEvent(std::move(event));
+    pending_input_marks_.push_back(now_sec);
 }
 
-sm::Status HoverThrustEstimatorRuntime::ingestImu(double acceleration_z, double stamp_sec,
-                                                  double now_sec) {
-    return ingestSample(input_.imu_acc_z, acceleration_z, stamp_sec, now_sec,
-                        event_type::INPUT_IMU_UPDATED);
+::state_machine::Status HoverThrustEstimatorRuntime::ingestImu(double acceleration_z,
+                                                               double stamp_sec, double now_sec) {
+    ingestSample(input_.imu_acc_z, acceleration_z, stamp_sec, now_sec);
+    return {};
 }
-sm::Status HoverThrustEstimatorRuntime::ingestThrust(double normalized_thrust, bool ignored,
-                                                     double stamp_sec, double now_sec) {
+
+::state_machine::Status HoverThrustEstimatorRuntime::ingestThrust(double normalized_thrust,
+                                                                  bool ignored, double stamp_sec,
+                                                                  double now_sec) {
     input_.thrust_ignored = ignored;
-    return ingestSample(input_.normalized_thrust, normalized_thrust, stamp_sec, now_sec,
-                        event_type::INPUT_THRUST_UPDATED);
-}
-sm::Status HoverThrustEstimatorRuntime::ingestAltitude(double altitude, double stamp_sec,
-                                                       double now_sec) {
-    return ingestSample(input_.altitude, altitude, stamp_sec, now_sec,
-                        event_type::INPUT_ALTITUDE_UPDATED);
+    ingestSample(input_.normalized_thrust, normalized_thrust, stamp_sec, now_sec);
+    return {};
 }
 
-sm::Status HoverThrustEstimatorRuntime::postInputEvent(sm::Event event, const Input& input) {
-    applyInputEvent(input);
-    event.category = sm::EventCategory::kInput;
-    return machine_->postEvent(std::move(event));
+::state_machine::Status HoverThrustEstimatorRuntime::ingestAltitude(double altitude,
+                                                                    double stamp_sec,
+                                                                    double now_sec) {
+    ingestSample(input_.altitude, altitude, stamp_sec, now_sec);
+    return {};
+}
+
+::state_machine::Status HoverThrustEstimatorRuntime::applyInput(const Input& input,
+                                                                double now_sec) {
+    input_ = input;
+    pending_input_marks_.push_back(now_sec);
+    return {};
 }
 
 HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double now_sec) {
-    current_time_sec_ = now_sec;
     published_estimates_.clear();
-    debug_trace_records_.clear();
-    const auto transition_result = machine_->update({64, 64, false});
-    appendDebugTrace(HoverThrustDebugTracePhase::kTransitionPass, machine_->currentTrace());
-    requireOk(transition_result.status, "update hover thrust estimator transitions");
-    const auto tick_result = machine_->update({64, 64, true});
-    appendDebugTrace(HoverThrustDebugTracePhase::kTickPass, machine_->currentTrace());
-    requireOk(tick_result.status, "tick hover thrust estimator states");
-    // Output smoothing is a domain policy driven ONLY by state publication
-    // gates. Every facade serializes these already-driven immutable snapshots.
-    for (const auto& event : machine_->currentOutputEvents()) {
-        if (event.id != output_event_type::PUBLISH_ESTIMATE) {
-            continue;
-        }
-        const double stamp = std::isfinite(event.timestamp) ? event.timestamp : now_sec;
-        output_model_.driveTowardTarget(stamp);
-        published_estimates_.push_back({event, stamp, refreshOutputSnapshot()});
+    transition_trace_.clear();
+    publication_requests_.clear();
+
+    // Pending input events are evaluated in arrival order at their own event
+    // clock, exactly as the old health monitor did for posted input events.
+    for (const double mark_sec : pending_input_marks_) {
+        evaluateHealthAt(mark_sec);
     }
+    pending_input_marks_.clear();
+
+    // The idle tick still evaluates health at the owner clock. A condition edge
+    // now transitions in this same turn instead of leaving a one-turn stale
+    // output behind.
+    evaluateHealthAt(now_sec);
+
+    auto tick_transition = machine_->dispatch(HoverThrustTick{now_sec}, *this);
+    machine_->apply(std::move(tick_transition), now_sec);
+
+    for (const auto& request : publication_requests_) {
+        const double stamp = std::isfinite(request.stamp_sec) ? request.stamp_sec : now_sec;
+        output_model_.driveTowardTarget(stamp);
+        last_output_ = makeOutput(currentState(), flags_, last_sample_used_, health_);
+        published_estimates_.push_back(PublishedEstimate{
+            PublicationEvent{output_event_type::PUBLISH_ESTIMATE, stamp, ++publication_sequence_},
+            stamp, last_output_});
+    }
+
     input_.batch_time_jump = false;
+    ++owner_turn_;
     return last_output_;
 }
 
 HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::output(double now_sec) const {
     (void)now_sec;
-    return makeOutput(state_, flags_, false, health_);
+    return makeOutput(currentState(), flags_, false, health_);
 }
 
-HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::refreshOutputSnapshot() {
-    last_output_ = makeOutput(state_, flags_, last_sample_used_, health_);
-    return last_output_;
-}
+HoverThrustEstimatorRuntime::Wake HoverThrustEstimatorRuntime::nextWake(double now_sec) const {
+    Wake wake;
+    wake.now_sec = now_sec;
 
-std::vector<sm::Event> HoverThrustEstimatorRuntime::debugOutputEvents(double now_sec) const {
-    if (debug_trace_records_.empty()) {
-        return {};
+    std::optional<double> next;
+    auto consider = [&next](std::optional<double> deadline) {
+        if (deadline && std::isfinite(*deadline) && (!next || *deadline < *next)) {
+            next = *deadline;
+        }
+    };
+
+    if (!pending_input_marks_.empty()) {
+        next = now_sec;
     }
 
-    sm::Event event(output_event_type::PUBLISH_DEBUG_TRACE, sm::EventTimestamp{now_sec});
-    event.category = sm::EventCategory::kOutput;
-    event.source = "hover_thrust_estimator_runtime";
-    return {event};
-}
+    std::visit(
+        [&](const auto& state) {
+            using State = std::decay_t<decltype(state)>;
+            if constexpr (std::is_same_v<State, AirborneState>) {
+                consider(state.raw_update_gate.nextDue(now_sec, rawPeriodSec()));
+            }
+            consider(state.publish_gate.nextDue(now_sec, publishPeriodSec()));
+        },
+        machine_->state());
 
-void HoverThrustEstimatorRuntime::enterState(HoverThrustStateId state) {
-    state_ = state;
-}
-
-void HoverThrustEstimatorRuntime::setupMachine() {
-    auto builder = sm::StateMachine::builder("HoverThrustEstimatorStateMachine");
-    builder.region(region_type::HEALTH)
-        .name("health")
-        .order(0)
-        .initial(state_type::HealthMonitor)
-        .state(state_type::HealthMonitor)
-        .name("HealthMonitor")
-        .impl(std::make_unique<HealthMonitorState>(*this))
-        .endRegion()
-        .region(region_type::ESTIMATION)
-        .name("estimation")
-        .order(10)
-        .initial(state_type::SelfCheck)
-        .state(state_type::SelfCheck)
-        .name("SelfCheck")
-        .impl(std::make_unique<SelfCheckState>(*this))
-        .state(state_type::Ground)
-        .name("Ground")
-        .impl(std::make_unique<GroundState>(*this))
-        .state(state_type::Airborne)
-        .name("Airborne")
-        .impl(std::make_unique<AirborneState>(*this))
-        .endRegion();
-
-    builder.transition()
-        .from(state_type::SelfCheck)
-        .to(state_type::Ground)
-        .on(event_type::HEALTH_BELOW_MIN_ALTITUDE)
-        .priority(transition_priority::AUTOMATIC)
-        .evaluationOrder(0);
-    builder.transition()
-        .from(state_type::SelfCheck)
-        .to(state_type::Airborne)
-        .on(event_type::HEALTH_ESTIMATION_READY)
-        .priority(transition_priority::AUTOMATIC)
-        .evaluationOrder(0);
-    builder.transition()
-        .from(state_type::Ground)
-        .to(state_type::SelfCheck)
-        .on(event_type::HEALTH_INPUT_UNHEALTHY)
-        .priority(transition_priority::AUTOMATIC)
-        .evaluationOrder(0);
-    builder.transition()
-        .from(state_type::Ground)
-        .to(state_type::Airborne)
-        .on(event_type::HEALTH_ESTIMATION_READY)
-        .priority(transition_priority::AUTOMATIC)
-        .evaluationOrder(0);
-    builder.transition()
-        .from(state_type::Airborne)
-        .to(state_type::SelfCheck)
-        .on(event_type::HEALTH_INPUT_UNHEALTHY)
-        .priority(transition_priority::AUTOMATIC)
-        .evaluationOrder(0);
-    builder.transition()
-        .from(state_type::Airborne)
-        .to(state_type::Ground)
-        .on(event_type::HEALTH_BELOW_MIN_ALTITUDE)
-        .priority(transition_priority::AUTOMATIC)
-        .evaluationOrder(0);
-    auto machine_result = builder.build();
-    requireOk(machine_result.status, "build hover thrust estimator state machine");
-    machine_ = std::move(machine_result.value);
-    requireOk(machine_->start(), "start hover thrust estimator state machine");
-}
-
-void HoverThrustEstimatorRuntime::applyInputEvent(const Input& input) {
-    input_ = input;
-}
-
-void HoverThrustEstimatorRuntime::appendDebugTrace(HoverThrustDebugTracePhase phase,
-                                                   const std::vector<sm::EventTraceRecord>& trace) {
-    for (const auto& record : trace) {
-        if (isDebugTraceRecordInteresting(record)) {
-            debug_trace_records_.push_back(DebugTraceRecord{phase, record});
+    // sampleStale() is strict: it becomes true after stamp + timeout.
+    const Sample* samples[] = {&input_.imu_acc_z, &input_.normalized_thrust, &input_.altitude};
+    for (const Sample* sample : samples) {
+        if (!sample->received || !std::isfinite(sample->stamp_sec)) {
+            continue;
+        }
+        const double boundary = std::nextafter(
+            sample->stamp_sec + config_.sample_timeout, std::numeric_limits<double>::infinity());
+        // Once the timeout is already in the past, health has been (or is about
+        // to be) evaluated at now; keeping that past deadline would busy-loop
+        // the node until the next sample. Only future timeout edges are wakes.
+        if (std::isfinite(boundary) && boundary > now_sec) {
+            consider(boundary);
         }
     }
+
+    wake.next_deadline_sec = next;
+    return wake;
 }
 
-bool HoverThrustEstimatorRuntime::isDebugTraceRecordInteresting(
-    const sm::EventTraceRecord& record) {
-    switch (record.kind) {
-        case sm::EventTraceRecord::Kind::kInternalEventGenerated:
-        case sm::EventTraceRecord::Kind::kTransitionCommitted:
-        case sm::EventTraceRecord::Kind::kInternalEventDeferred:
-            return true;
-        case sm::EventTraceRecord::Kind::kEventConsumed:
-            return record.event.category == sm::EventCategory::kInternal;
-        case sm::EventTraceRecord::Kind::kOutputEventGenerated:
-            return false;
+HoverThrustStateId HoverThrustEstimatorRuntime::currentState() const {
+    return stateId(machine_->state());
+}
+
+void HoverThrustEstimatorRuntime::evaluateHealthAt(double now_sec) {
+    const HoverThrustHealthCondition previous_condition = health_.condition;
+    const auto health = health_checks::classify(input_, config_, now_sec);
+    health_ = health;
+    if (health.condition == previous_condition) {
+        return;
     }
-    return false;
+
+    const HoverThrustStateId from_state = currentState();
+    auto transition =
+        machine_->dispatch(HoverThrustHealthEdge{health.condition, health.flags, now_sec}, *this);
+    const HoverThrustStateId to_state = transitionTarget(transition);
+    if (to_state == 0) {
+        return;
+    }
+
+    onEnterState(to_state);
+    machine_->apply(std::move(transition), now_sec);
+    transition_trace_.push_back(TransitionTrace{++trace_sequence_, now_sec,
+                                                eventIdForCondition(health.condition), from_state,
+                                                to_state, transition_priority::AUTOMATIC});
 }
 
-HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::recordStateOutput(
-    HoverThrustStateId state, uint32_t flags, bool sample_used) {
+void HoverThrustEstimatorRuntime::onEnterState(HoverThrustStateId state) {
+    switch (state) {
+        case state_type::SelfCheck:
+            output_model_.setTarget(config_.initial_hover_thrust);
+            break;
+        case state_type::Ground:
+            output_model_.freezeTarget();
+            break;
+        case state_type::Airborne:
+            break;
+        default:
+            break;
+    }
+}
+
+void HoverThrustEstimatorRuntime::tickState(SelfCheckState& state, double now_sec) {
+    if (health_.condition != HoverThrustHealthCondition::kInputUnhealthy) {
+        return;
+    }
+    recordStateOutput(state_type::SelfCheck, health_.flags, false);
+    publishEstimateIfDue(state.publish_gate, now_sec);
+}
+
+void HoverThrustEstimatorRuntime::tickState(GroundState& state, double now_sec) {
+    if (health_.condition != HoverThrustHealthCondition::kBelowMinAltitude) {
+        return;
+    }
+    recordStateOutput(state_type::Ground, health_.flags, false);
+    publishEstimateIfDue(state.publish_gate, now_sec);
+}
+
+void HoverThrustEstimatorRuntime::tickState(AirborneState& state, double now_sec) {
+    if (health_.condition != HoverThrustHealthCondition::kEstimationReady) {
+        return;
+    }
+
+    uint32_t flags = health_.flags;
+    const bool sample_used = updateRawEstimateIfDue(state.raw_update_gate, now_sec, flags);
+    recordStateOutput(state_type::Airborne, flags, sample_used);
+    publishEstimateIfDue(state.publish_gate, now_sec);
+}
+
+bool HoverThrustEstimatorRuntime::updateRawEstimateIfDue(PeriodicGate& gate, double now_sec,
+                                                         uint32_t& flags) {
+    if (!gate.due(now_sec, rawPeriodSec())) {
+        return false;
+    }
+    if (!health_.ready) {
+        flags |= HoverThrustRuntimeFlag::kRawEstimateStale;
+        return false;
+    }
+
+    const auto& input = input_;
+    const bool sample_used = estimator_.update(
+        input.imu_acc_z.value, input.normalized_thrust.value, input.normalized_thrust.stamp_sec);
+    if (!sample_used) {
+        flags |= HoverThrustRuntimeFlag::kEstimatorRejected;
+        return false;
+    }
+
+    output_model_.setRaw(estimator_.rawEstimate());
+    output_model_.setTarget(estimator_.rawEstimate());
+    last_estimate_stamp_sec_ = input.normalized_thrust.stamp_sec;
+    return true;
+}
+
+void HoverThrustEstimatorRuntime::publishEstimateIfDue(PeriodicGate& gate, double now_sec) {
+    if (!gate.due(now_sec, publishPeriodSec())) {
+        return;
+    }
+    publication_requests_.push_back(PublicationRequest{now_sec});
+}
+
+void HoverThrustEstimatorRuntime::recordStateOutput(HoverThrustStateId state, uint32_t flags,
+                                                    bool sample_used) {
     flags_ = flags;
-    state_ = state;
     last_sample_used_ = sample_used;
-    last_output_ = makeOutput(state_, flags_, sample_used, health_);
-    return last_output_;
+    last_output_ = makeOutput(state, flags_, sample_used, health_);
 }
 
 HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::makeOutput(

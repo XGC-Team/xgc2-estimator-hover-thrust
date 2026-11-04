@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "hover_thrust_estimator/common/event_types.h"
-#include "hover_thrust_estimator/hover_thrust_estimator_runtime.h"
 
 namespace hover_thrust_estimator {
 namespace {
@@ -49,15 +48,18 @@ HoverThrustOutputConsumer::HoverThrustOutputConsumer(
         estimate_state_topic, queue_size, true);
 }
 
-bool HoverThrustOutputConsumer::handle(const ::state_machine::Event& event) {
+bool HoverThrustOutputConsumer::handle(const PublicationEvent& event) {
     if (event.id != output_event_type::PUBLISH_ESTIMATE) {
         return false;
     }
 
     for (const auto& publication : runtime_.publishedEstimates()) {
-        if (publication.event.timestamp != event.timestamp &&
-            !(std::isnan(publication.event.timestamp) && std::isnan(event.timestamp)))
+        const bool same_publication =
+            event.sequence != 0 ? publication.event.sequence == event.sequence
+                                : publication.event.timestamp == event.timestamp;
+        if (!same_publication) {
             continue;
+        }
         const ros::Time stamp = ros1_utils::timeSecOrNow(publication.stamp_sec);
         executor_.pushTask(makePublishTask("PublishHoverThrustEstimate", estimate_state_pub_,
                                            makeEstimateStateMessage(publication.output, stamp)));

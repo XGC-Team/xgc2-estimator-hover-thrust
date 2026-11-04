@@ -47,69 +47,20 @@ HoverThrustEstimatorRuntime::Input readyInput(double sample_stamp_sec, double ho
     return input;
 }
 
-void postAllInputEvents(HoverThrustEstimatorRuntime& runtime,
-                        const HoverThrustEstimatorRuntime::Input& input, double event_time_sec) {
-    runtime.postInputEvent(::state_machine::Event(event_type::INPUT_IMU_UPDATED,
-                                                  ::state_machine::EventTimestamp{event_time_sec}),
-                           input);
-    runtime.postInputEvent(::state_machine::Event(event_type::INPUT_THRUST_UPDATED,
-                                                  ::state_machine::EventTimestamp{event_time_sec}),
-                           input);
-    runtime.postInputEvent(::state_machine::Event(event_type::INPUT_ALTITUDE_UPDATED,
-                                                  ::state_machine::EventTimestamp{event_time_sec}),
-                           input);
+void applyBatch(HoverThrustEstimatorRuntime& runtime,
+                const HoverThrustEstimatorRuntime::Input& input, double event_time_sec) {
+    EXPECT_TRUE(runtime.applyInput(input, event_time_sec).ok());
 }
 
-void postAllInputEvents(HoverThrustEstimatorRuntime& runtime,
-                        const HoverThrustEstimatorRuntime::Input& input) {
-    postAllInputEvents(runtime, input, input.normalized_thrust.stamp_sec);
+void applyBatch(HoverThrustEstimatorRuntime& runtime,
+                const HoverThrustEstimatorRuntime::Input& input) {
+    applyBatch(runtime, input, input.normalized_thrust.stamp_sec);
 }
 
-bool committedTransitionForEvent(const std::vector<::state_machine::ProcessedEventRecord>& records,
-                                 ::state_machine::EventId event_id, ::state_machine::StateId from,
-                                 ::state_machine::StateId to) {
-    for (const auto& record : records) {
-        if (record.triggered_transition && record.event.id == event_id &&
-            record.from_state == from && record.to_state == to) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool committedAnyHealthTransition(
-    const std::vector<::state_machine::ProcessedEventRecord>& records) {
-    for (const auto& record : records) {
-        if (!record.triggered_transition) {
-            continue;
-        }
-        if (record.event.id == event_type::HEALTH_INPUT_UNHEALTHY ||
-            record.event.id == event_type::HEALTH_BELOW_MIN_ALTITUDE ||
-            record.event.id == event_type::HEALTH_ESTIMATION_READY) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool debugTraceHasEvent(const HoverThrustEstimatorRuntime& runtime,
-                        ::state_machine::EventTraceRecord::Kind kind,
-                        ::state_machine::EventId event_id) {
-    for (const auto& record : runtime.debugTraceRecords()) {
-        if (record.trace.kind == kind && record.trace.event.id == event_id) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool debugTraceHasTransition(const HoverThrustEstimatorRuntime& runtime,
-                             ::state_machine::EventId event_id, ::state_machine::StateId from,
-                             ::state_machine::StateId to) {
-    for (const auto& record : runtime.debugTraceRecords()) {
-        if (record.trace.kind == ::state_machine::EventTraceRecord::Kind::kTransitionCommitted &&
-            record.trace.event.id == event_id && record.trace.from_state == from &&
-            record.trace.to_state == to) {
+bool transitionForEvent(const HoverThrustEstimatorRuntime& runtime, uint32_t event_id,
+                        HoverThrustStateId from, HoverThrustStateId to) {
+    for (const auto& trace : runtime.transitionTrace()) {
+        if (trace.event_id == event_id && trace.from_state == from && trace.to_state == to) {
             return true;
         }
     }
@@ -200,16 +151,16 @@ TEST(HoverThrustEstimatorRuntimeTest, PublishOutputIsDrivenByStateGate) {
     HoverThrustEstimatorRuntime runtime;
 
     runtime.update(1.0);
-    ASSERT_EQ(runtime.getStateMachine().currentOutputEvents().size(), 1u);
-    EXPECT_EQ(runtime.getStateMachine().currentOutputEvents().front().id,
+    ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
+    EXPECT_EQ(runtime.publishedEstimates().front().event.id,
               output_event_type::PUBLISH_ESTIMATE);
 
     runtime.update(1.005);
-    EXPECT_TRUE(runtime.getStateMachine().currentOutputEvents().empty());
+    EXPECT_TRUE(runtime.publishedEstimates().empty());
 
     runtime.update(1.011);
-    ASSERT_EQ(runtime.getStateMachine().currentOutputEvents().size(), 1u);
-    EXPECT_EQ(runtime.getStateMachine().currentOutputEvents().front().id,
+    ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
+    EXPECT_EQ(runtime.publishedEstimates().front().event.id,
               output_event_type::PUBLISH_ESTIMATE);
 }
 
@@ -218,9 +169,7 @@ TEST(HoverThrustEstimatorRuntimeTest, MissingImuPublishesSelfCheckOutputWithFlag
     HoverThrustEstimatorRuntime::Input input;
     constexpr double event_time_sec = 1.0;
 
-    runtime.postInputEvent(::state_machine::Event(event_type::INPUT_THRUST_UPDATED,
-                                                  ::state_machine::EventTimestamp{event_time_sec}),
-                           input);
+    applyBatch(runtime, input, event_time_sec);
     const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, state_type::SelfCheck);
@@ -232,7 +181,7 @@ TEST(HoverThrustEstimatorRuntimeTest, MissingImuPublishesSelfCheckOutputWithFlag
 TEST(HoverThrustEstimatorRuntimeTest, ReadySamplesMoveToAirborneState) {
     HoverThrustEstimatorRuntime runtime;
 
-    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    applyBatch(runtime, readyInput(1.0, 0.8, 0.5));
     const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, state_type::Airborne);
@@ -247,14 +196,9 @@ TEST(HoverThrustEstimatorRuntimeTest, ReadySamplesMoveToAirborneState) {
     EXPECT_DOUBLE_EQ(runtime.publishedEstimates().front().output.hover_thrust, output.hover_thrust);
     EXPECT_DOUBLE_EQ(output.source_stamp_sec, 1.0);
     EXPECT_DOUBLE_EQ(output.last_estimate_stamp_sec, 1.0);
-    EXPECT_TRUE(runtime.hasDebugTrace());
-    EXPECT_TRUE(debugTraceHasEvent(runtime,
-                                   ::state_machine::EventTraceRecord::Kind::kInternalEventGenerated,
-                                   event_type::HEALTH_ESTIMATION_READY));
-    EXPECT_TRUE(debugTraceHasTransition(runtime, event_type::HEALTH_ESTIMATION_READY,
-                                        state_type::SelfCheck, state_type::Airborne));
-    ASSERT_EQ(runtime.debugOutputEvents(1.0).size(), 1u);
-    EXPECT_EQ(runtime.debugOutputEvents(1.0).front().id, output_event_type::PUBLISH_DEBUG_TRACE);
+    ASSERT_EQ(runtime.transitionTrace().size(), 1u);
+    EXPECT_TRUE(transitionForEvent(runtime, event_type::HEALTH_ESTIMATION_READY,
+                                   state_type::SelfCheck, state_type::Airborne));
 
     const auto filtered_output = advanceFilterForPublish(runtime, 1.0);
     EXPECT_GT(filtered_output.hover_thrust, 0.3);
@@ -262,14 +206,14 @@ TEST(HoverThrustEstimatorRuntimeTest, ReadySamplesMoveToAirborneState) {
 
 TEST(HoverThrustEstimatorRuntimeTest, StaleInputHoldsLastSafeEstimate) {
     HoverThrustEstimatorRuntime runtime;
-    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    applyBatch(runtime, readyInput(1.0, 0.8, 0.5));
     runtime.update(1.0);
     auto stale = readyInput(2.0, 0.7, 0.5);
     stale.imu_acc_z.stamp_sec = 1.0;
     stale.normalized_thrust.stamp_sec = 1.0;
     stale.altitude.stamp_sec = 1.0;
 
-    postAllInputEvents(runtime, stale, 2.0);
+    applyBatch(runtime, stale, 2.0);
     const auto output = runtime.update(2.0);
 
     EXPECT_EQ(output.state, state_type::SelfCheck);
@@ -281,58 +225,52 @@ TEST(HoverThrustEstimatorRuntimeTest, StaleInputHoldsLastSafeEstimate) {
 
 TEST(HoverThrustEstimatorRuntimeTest, TickDetectsStaleInputsWithoutNewInputEvents) {
     HoverThrustEstimatorRuntime runtime;
-    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    applyBatch(runtime, readyInput(1.0, 0.8, 0.5));
     runtime.update(1.0);
     ASSERT_EQ(runtime.output(1.0).state, state_type::Airborne);
 
-    runtime.update(1.21);
+    const auto output = runtime.update(1.21);
 
     EXPECT_EQ(runtime.currentState(), state_type::SelfCheck);
     EXPECT_EQ(runtime.health().condition, HoverThrustHealthCondition::kInputUnhealthy);
     EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kImuStale, 0u);
     EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kThrustStale, 0u);
     EXPECT_NE(runtime.health().flags & HoverThrustRuntimeFlag::kAltitudeStale, 0u);
-
-    const auto output = runtime.update(1.211);
-
+    // The stale health edge and its SelfCheck output are now the same turn.
     EXPECT_EQ(output.state, state_type::SelfCheck);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kImuStale, 0u);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kThrustStale, 0u);
     EXPECT_NE(output.flags & HoverThrustRuntimeFlag::kAltitudeStale, 0u);
     EXPECT_FALSE(output.sample_used);
+    ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
+    EXPECT_EQ(runtime.publishedEstimates().front().output.state, state_type::SelfCheck);
+    EXPECT_TRUE(transitionForEvent(runtime, event_type::HEALTH_INPUT_UNHEALTHY,
+                                   state_type::Airborne, state_type::SelfCheck));
+
+    const auto next_output = runtime.update(1.211);
+    EXPECT_EQ(next_output.state, state_type::SelfCheck);
+    EXPECT_FALSE(next_output.sample_used);
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, HealthEventsAreTriggeredByConditionEdges) {
     HoverThrustEstimatorRuntime runtime;
-    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    applyBatch(runtime, readyInput(1.0, 0.8, 0.5));
     runtime.update(1.0);
     ASSERT_EQ(runtime.currentState(), state_type::Airborne);
     ASSERT_EQ(runtime.health().condition, HoverThrustHealthCondition::kEstimationReady);
 
-    const size_t before_same_condition_update = runtime.getStateMachine().generatedEventCount();
     runtime.update(1.005);
-    EXPECT_EQ(runtime.getStateMachine().generatedEventCount(), before_same_condition_update);
-    EXPECT_TRUE(runtime.getStateMachine().currentEvents().empty());
+    EXPECT_TRUE(runtime.transitionTrace().empty());
 
-    const size_t before_condition_edge = runtime.getStateMachine().generatedEventCount();
     runtime.update(1.21);
-    EXPECT_EQ(runtime.getStateMachine().generatedEventCount(), before_condition_edge + 1);
     EXPECT_EQ(runtime.currentState(), state_type::SelfCheck);
     EXPECT_EQ(runtime.health().condition, HoverThrustHealthCondition::kInputUnhealthy);
-    EXPECT_TRUE(committedTransitionForEvent(runtime.getStateMachine().currentEvents(),
-                                            event_type::HEALTH_INPUT_UNHEALTHY,
-                                            state_type::Airborne, state_type::SelfCheck));
-    EXPECT_TRUE(debugTraceHasEvent(runtime,
-                                   ::state_machine::EventTraceRecord::Kind::kInternalEventGenerated,
-                                   event_type::HEALTH_INPUT_UNHEALTHY));
-    EXPECT_TRUE(debugTraceHasTransition(runtime, event_type::HEALTH_INPUT_UNHEALTHY,
-                                        state_type::Airborne, state_type::SelfCheck));
+    ASSERT_EQ(runtime.transitionTrace().size(), 1u);
+    EXPECT_TRUE(transitionForEvent(runtime, event_type::HEALTH_INPUT_UNHEALTHY,
+                                   state_type::Airborne, state_type::SelfCheck));
 
     runtime.update(1.215);
-    EXPECT_FALSE(committedTransitionForEvent(runtime.getStateMachine().currentEvents(),
-                                             event_type::HEALTH_INPUT_UNHEALTHY,
-                                             state_type::Airborne, state_type::SelfCheck));
-    EXPECT_FALSE(runtime.hasDebugTrace());
+    EXPECT_TRUE(runtime.transitionTrace().empty());
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, StableReadyInputDoesNotEmitHealthTransitionsAtOneKilohertz) {
@@ -341,7 +279,7 @@ TEST(HoverThrustEstimatorRuntimeTest, StableReadyInputDoesNotEmitHealthTransitio
     config.publish_rate_hz = 0.5;
     runtime.setConfig(config);
 
-    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    applyBatch(runtime, readyInput(1.0, 0.8, 0.5));
     runtime.update(1.0);
     ASSERT_EQ(runtime.currentState(), state_type::Airborne);
     ASSERT_EQ(runtime.health().condition, HoverThrustHealthCondition::kEstimationReady);
@@ -353,37 +291,35 @@ TEST(HoverThrustEstimatorRuntimeTest, StableReadyInputDoesNotEmitHealthTransitio
         input.normalized_thrust.period_sec = 0.001;
         input.altitude.period_sec = 0.001;
 
-        const size_t before_input_events = runtime.getStateMachine().generatedEventCount();
-        postAllInputEvents(runtime, input);
-        ASSERT_EQ(runtime.getStateMachine().generatedEventCount(), before_input_events + 3)
-            << "iteration " << i;
+        applyBatch(runtime, input);
+        EXPECT_TRUE(runtime.hasPendingInput()) << "iteration " << i;
         runtime.update(stamp_sec);
 
-        EXPECT_EQ(runtime.getStateMachine().generatedEventCount(), before_input_events + 3)
-            << "iteration " << i;
+        EXPECT_FALSE(runtime.hasPendingInput()) << "iteration " << i;
         EXPECT_EQ(runtime.currentState(), state_type::Airborne) << "iteration " << i;
         EXPECT_EQ(runtime.health().condition, HoverThrustHealthCondition::kEstimationReady)
             << "iteration " << i;
-        EXPECT_FALSE(committedAnyHealthTransition(runtime.getStateMachine().currentEvents()))
-            << "iteration " << i;
-        EXPECT_FALSE(runtime.hasDebugTrace()) << "iteration " << i;
-        EXPECT_TRUE(runtime.debugOutputEvents(stamp_sec).empty()) << "iteration " << i;
+        EXPECT_TRUE(runtime.transitionTrace().empty()) << "iteration " << i;
     }
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, TickStaleSelfCheckKeepsPublishingOutputEvents) {
     HoverThrustEstimatorRuntime runtime;
-    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    applyBatch(runtime, readyInput(1.0, 0.8, 0.5));
     runtime.update(1.0);
     advanceFilterForPublish(runtime, 1.0);
 
-    runtime.update(1.21);
-    EXPECT_EQ(runtime.output(1.21).state, state_type::SelfCheck);
+    const auto stale_output = runtime.update(1.21);
+    EXPECT_EQ(stale_output.state, state_type::SelfCheck);
+    ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
+    EXPECT_EQ(runtime.publishedEstimates().front().event.id,
+              output_event_type::PUBLISH_ESTIMATE);
+    EXPECT_EQ(runtime.publishedEstimates().front().output.state, state_type::SelfCheck);
 
     runtime.update(1.221);
 
-    ASSERT_EQ(runtime.getStateMachine().currentOutputEvents().size(), 1u);
-    EXPECT_EQ(runtime.getStateMachine().currentOutputEvents().front().id,
+    ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
+    EXPECT_EQ(runtime.publishedEstimates().front().event.id,
               output_event_type::PUBLISH_ESTIMATE);
     const auto filtered_output = advanceFilterForPublish(runtime, 1.221);
     EXPECT_EQ(filtered_output.state, state_type::SelfCheck);
@@ -392,7 +328,7 @@ TEST(HoverThrustEstimatorRuntimeTest, TickStaleSelfCheckKeepsPublishingOutputEve
 
 TEST(HoverThrustEstimatorRuntimeTest, SelfCheckReturnsToDefaultWithoutOutputJump) {
     HoverThrustEstimatorRuntime runtime;
-    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    applyBatch(runtime, readyInput(1.0, 0.8, 0.5));
     runtime.update(1.0);
     const auto airborne_output = advanceFilterForPublish(runtime, 1.0);
 
@@ -401,7 +337,7 @@ TEST(HoverThrustEstimatorRuntimeTest, SelfCheckReturnsToDefaultWithoutOutputJump
     stale.normalized_thrust.stamp_sec = 1.0;
     stale.altitude.stamp_sec = 1.0;
 
-    postAllInputEvents(runtime, stale, 1.21);
+    applyBatch(runtime, stale, 1.21);
     runtime.update(1.21);
     const auto output = advanceFilterForPublish(runtime, 1.21);
 
@@ -416,7 +352,7 @@ TEST(HoverThrustEstimatorRuntimeTest, BelowMinimumAltitudeHoldsOutputAndReportsS
     auto input = readyInput(1.0, 0.8, 0.5);
     input.altitude.value = 0.1;
 
-    postAllInputEvents(runtime, input);
+    applyBatch(runtime, input);
     const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, state_type::Ground);
@@ -427,13 +363,13 @@ TEST(HoverThrustEstimatorRuntimeTest, BelowMinimumAltitudeHoldsOutputAndReportsS
 
 TEST(HoverThrustEstimatorRuntimeTest, GroundKeepsFilteringTowardFrozenTarget) {
     HoverThrustEstimatorRuntime runtime;
-    postAllInputEvents(runtime, readyInput(0.001, 0.8, 0.5));
+    applyBatch(runtime, readyInput(0.001, 0.8, 0.5));
     runtime.update(0.001);
     const auto airborne_output = advanceFilterForPublish(runtime, 0.001);
 
     auto ground_input = readyInput(0.02, 0.7, 0.5);
     ground_input.altitude.value = 0.1;
-    postAllInputEvents(runtime, ground_input);
+    applyBatch(runtime, ground_input);
     runtime.update(0.02);
     const auto ground_output = advanceFilterForPublish(runtime, 0.02);
 
@@ -447,7 +383,7 @@ TEST(HoverThrustEstimatorRuntimeTest, IgnoredThrustReportsInvalidThrust) {
     auto input = readyInput(1.0, 0.8, 0.5);
     input.thrust_ignored = true;
 
-    postAllInputEvents(runtime, input);
+    applyBatch(runtime, input);
     const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, state_type::SelfCheck);
@@ -463,7 +399,7 @@ TEST(HoverThrustEstimatorRuntimeTest, TimeJumpReturnsToSelfCheckWithFlag) {
     input.normalized_thrust.stamp_sec = 1.2;
     input.altitude.stamp_sec = 1.2;
 
-    postAllInputEvents(runtime, input, 1.0);
+    applyBatch(runtime, input, 1.0);
     const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, state_type::SelfCheck);
@@ -478,7 +414,7 @@ TEST(HoverThrustEstimatorRuntimeTest, LowInputRateReturnsToSelfCheckWithFlag) {
     input.normalized_thrust.period_sec = 1.0;
     input.altitude.period_sec = 1.0;
 
-    postAllInputEvents(runtime, input);
+    applyBatch(runtime, input);
     const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, state_type::SelfCheck);
@@ -496,7 +432,7 @@ TEST(HoverThrustEstimatorRuntimeTest, NonFiniteInputsReturnToSelfCheckWithFlags)
     input.altitude.value = std::numeric_limits<double>::quiet_NaN();
     input.altitude.finite = false;
 
-    postAllInputEvents(runtime, input);
+    applyBatch(runtime, input);
     const auto output = runtime.update(1.0);
 
     EXPECT_EQ(output.state, state_type::SelfCheck);
@@ -511,18 +447,18 @@ TEST(HoverThrustEstimatorRuntimeTest, GroundAndAirborneCanRecoverBothDirections)
     auto ground_input = readyInput(1.0, 0.8, 0.5);
     ground_input.altitude.value = 0.1;
 
-    postAllInputEvents(runtime, ground_input);
+    applyBatch(runtime, ground_input);
     const auto ground_output = runtime.update(1.0);
     ASSERT_EQ(ground_output.state, state_type::Ground);
 
-    postAllInputEvents(runtime, readyInput(1.02, 0.8, 0.5));
+    applyBatch(runtime, readyInput(1.02, 0.8, 0.5));
     const auto airborne_output = runtime.update(1.02);
     EXPECT_EQ(airborne_output.state, state_type::Airborne);
     EXPECT_TRUE(airborne_output.sample_used);
 
     auto low_again = readyInput(1.04, 0.7, 0.5);
     low_again.altitude.value = 0.1;
-    postAllInputEvents(runtime, low_again);
+    applyBatch(runtime, low_again);
     const auto ground_again = runtime.update(1.04);
 
     EXPECT_EQ(ground_again.state, state_type::Ground);
@@ -532,19 +468,19 @@ TEST(HoverThrustEstimatorRuntimeTest, GroundAndAirborneCanRecoverBothDirections)
 TEST(HoverThrustEstimatorRuntimeTest, RawUpdateIsLimitedToConfiguredRate) {
     HoverThrustEstimatorRuntime runtime;
 
-    postAllInputEvents(runtime, readyInput(1.0, 0.8, 0.5));
+    applyBatch(runtime, readyInput(1.0, 0.8, 0.5));
     const auto first_output = runtime.update(1.0);
     ASSERT_EQ(first_output.state, state_type::Airborne);
     ASSERT_TRUE(first_output.sample_used);
     ASSERT_DOUBLE_EQ(first_output.last_estimate_stamp_sec, 1.0);
 
-    postAllInputEvents(runtime, readyInput(1.05, 0.7, 0.5));
+    applyBatch(runtime, readyInput(1.05, 0.7, 0.5));
     const auto skipped_output = runtime.update(1.05);
     EXPECT_EQ(skipped_output.state, state_type::Airborne);
     EXPECT_FALSE(skipped_output.sample_used);
     EXPECT_DOUBLE_EQ(skipped_output.last_estimate_stamp_sec, 1.0);
 
-    postAllInputEvents(runtime, readyInput(1.101, 0.7, 0.5));
+    applyBatch(runtime, readyInput(1.101, 0.7, 0.5));
     const auto updated_output = runtime.update(1.101);
     EXPECT_EQ(updated_output.state, state_type::Airborne);
     EXPECT_TRUE(updated_output.sample_used);
@@ -583,7 +519,7 @@ TEST(HoverThrustEstimatorRuntimeTest, ZeroStampHasNoHiddenClockFallback) {
 
 TEST(HoverThrustEstimatorRuntimeTest, PublishedOutputDoesNotAdvanceBetweenStateGates) {
     HoverThrustEstimatorRuntime runtime;
-    postAllInputEvents(runtime, readyInput(0.001, 0.8, 0.5));
+    applyBatch(runtime, readyInput(0.001, 0.8, 0.5));
     runtime.update(0.001);
     ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
     const auto publication = runtime.publishedEstimates().front();

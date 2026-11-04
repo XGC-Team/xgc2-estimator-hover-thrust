@@ -6,16 +6,13 @@
 #include <string>
 #include <utility>
 
-#include "hover_thrust_estimator/common/event_types.h"
-
 namespace hover_thrust_estimator {
 namespace {
 
-void logInputEventPostFailure(const ::state_machine::Status& status,
-                              ::state_machine::EventId failed_event_id,
-                              const std::string& failed_source) {
-    ROS_WARN_THROTTLE(1.0, "[HoverThrustInputProducer] Failed to post input event %u from %s: %s",
-                      failed_event_id, failed_source.c_str(), status.message.c_str());
+void logInputIngestFailure(const ::state_machine::Status& status,
+                           const std::string& failed_source) {
+    ROS_WARN_THROTTLE(1.0, "[HoverThrustInputProducer] Failed to ingest %s: %s",
+                      failed_source.c_str(), status.message.c_str());
 }
 
 }  // namespace
@@ -40,7 +37,7 @@ void HoverThrustInputProducer::imuCallback(const sensor_msgs::Imu::ConstPtr& msg
     const double stamp_sec = ros1_utils::messageStampOrNow(msg->header.stamp).toSec();
     const auto status = runtime_.ingestImu(msg->linear_acceleration.z, stamp_sec, stamp_sec);
     if (!status.ok())
-        logInputEventPostFailure(status, event_type::INPUT_IMU_UPDATED, "imu");
+        logInputIngestFailure(status, "imu");
 }
 
 void HoverThrustInputProducer::targetAttitudeCallback(
@@ -53,7 +50,7 @@ void HoverThrustInputProducer::targetAttitudeCallback(
     const double stamp_sec = ros1_utils::messageStampOrNow(msg->header.stamp).toSec();
     const auto status = runtime_.ingestThrust(msg->thrust, ignored, stamp_sec, stamp_sec);
     if (!status.ok())
-        logInputEventPostFailure(status, event_type::INPUT_THRUST_UPDATED, "target_attitude");
+        logInputIngestFailure(status, "target_attitude");
 }
 
 void HoverThrustInputProducer::poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
@@ -63,7 +60,7 @@ void HoverThrustInputProducer::poseCallback(const geometry_msgs::PoseStamped::Co
     const double stamp_sec = ros1_utils::messageStampOrNow(msg->header.stamp).toSec();
     const auto status = runtime_.ingestAltitude(msg->pose.position.z, stamp_sec, stamp_sec);
     if (!status.ok())
-        logInputEventPostFailure(status, event_type::INPUT_ALTITUDE_UPDATED, "altitude");
+        logInputIngestFailure(status, "altitude");
 }
 
 }  // namespace hover_thrust_estimator
