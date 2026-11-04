@@ -21,6 +21,14 @@ cannot hide the fault. The existing 8192 time-jump flag and `ready=false` remain
 the original health outcome; tolerances come from the unchanged sample-timing
 helper.
 
+The ROS owner loop arms one one-shot `ros::Timer` at `nextWake()`'s ROS-clock
+deadline and blocks on the existing global callback queue. Input callbacks and
+that timer wake the same owner; a paused simulation clock does not cause a
+wall-clock polling loop. Noetic's timer manager performs its stock 1 ms
+simulation-time check while a ROS timer is armed; the owner thread itself does
+not wake at that rate. Publication/raw phase and sample-timeout boundaries come
+from the unchanged runtime gates.
+
 A ROS-free build of the runtime is explicit:
 
 ```sh

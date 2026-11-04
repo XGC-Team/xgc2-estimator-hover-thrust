@@ -44,9 +44,11 @@ class HoverThrustEstimatorNode {
    private:
     void loadParams();
     void publishRuntimeOutputs();
+    void onDeadlineTimer(const ros::TimerEvent& event);
 
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
+    ros::Timer deadline_timer_;
 
     HoverThrustEstimatorRuntime runtime_;
     ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle> output_event_executor_;

@@ -1,10 +1,11 @@
 #include "hover_thrust_estimator/hover_thrust_estimator_node.h"
 
 #include <ros/callback_queue.h>
+#include <ros/timer.h>
 #include <ros1_utils/param_utils.h>
 
-#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <utility>
 
@@ -31,6 +32,10 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
     input_producer_ = std::make_unique<HoverThrustInputProducer>(
         nh_, imu_topic_, target_attitude_topic_, altitude_topic_, kRosQueueSize, runtime_);
 
+    deadline_timer_ = nh_.createTimer(ros::Duration(1.0),
+                                      &HoverThrustEstimatorNode::onDeadlineTimer, this,
+                                      /*oneshot=*/true, /*autostart=*/false);
+
     output_event_executor_.start();
 
     ROS_INFO(
@@ -42,6 +47,7 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
 }
 
 HoverThrustEstimatorNode::~HoverThrustEstimatorNode() {
+    deadline_timer_.stop();
     output_event_executor_.stop();
 }
 
@@ -52,23 +58,66 @@ void HoverThrustEstimatorNode::run(double frequency) {
         "updating RLS at %.1f Hz",
         estimator_config_.publish_rate_hz, estimator_config_.raw_update_rate_hz);
 
+    // This is a finite no-wake safety bound for the callback queue wait, not
+    // the ROS deadline and not a periodic poll. The one-shot ROS timer is the
+    // deadline primitive; ros::shutdown disables the global queue and wakes
+    // this wait.
+    const ros::WallDuration owner_wait(std::numeric_limits<int32_t>::max(), 999999999);
+
     while (ros::ok()) {
         const double now_sec = ros::Time::now().toSec();
         const auto wake = runtime_.nextWake(now_sec);
-        const bool deadline_due =
-            !wake.next_deadline_sec || now_sec >= *wake.next_deadline_sec;
-        if (runtime_.hasPendingInput() || deadline_due) {
+        // Every active alternative owns a publish gate; nextDue() returns now
+        // when that gate is uninitialized, so this is always populated.
+        const double deadline_sec = *wake.next_deadline_sec;
+
+        if (runtime_.hasPendingInput() || now_sec >= deadline_sec) {
             const double update_sec = ros::Time::now().toSec();
             runtime_.update(update_sec);
             publishRuntimeOutputs();
             continue;
         }
 
-        const double wait_sec = std::max(0.0, *wake.next_deadline_sec - now_sec);
-        ros::getGlobalCallbackQueue()->callAvailable(ros::WallDuration(wait_sec));
+        const double arm_sec = ros::Time::now().toSec();
+        if (arm_sec >= deadline_sec) {
+            continue;
+        }
+        ros::Duration until(deadline_sec - arm_sec);
+        if (until <= ros::Duration(0.0)) {
+            // Preserve a strictly positive residual that rounded to zero.
+            until = ros::Duration(0, 1);
+        }
+
+        deadline_timer_.stop();
+        deadline_timer_.setPeriod(until, true);
+        deadline_timer_.start();
+
+        // The ROS clock may advance while the timer is being armed. Recheck
+        // after arming and correct the already-started timer, without adding a
+        // second scheduler or a fallback wake.
+        const double after_arm_sec = ros::Time::now().toSec();
+        if (after_arm_sec >= deadline_sec) {
+            deadline_timer_.stop();
+            continue;
+        }
+        if (after_arm_sec > arm_sec) {
+            const double remaining_sec = deadline_sec - after_arm_sec;
+            ros::Duration adjusted(remaining_sec);
+            if (adjusted <= ros::Duration(0.0)) {
+                adjusted = ros::Duration(0, 1);
+            }
+            deadline_timer_.setPeriod(adjusted, true);
+        }
+
+        ros::getGlobalCallbackQueue()->callAvailable(owner_wait);
+        deadline_timer_.stop();
     }
 
     ROS_INFO("[HoverThrustEstimatorNode] Estimator loop exited");
+}
+
+void HoverThrustEstimatorNode::onDeadlineTimer(const ros::TimerEvent& event) {
+    (void)event;
 }
 
 void HoverThrustEstimatorNode::publishRuntimeOutputs() {

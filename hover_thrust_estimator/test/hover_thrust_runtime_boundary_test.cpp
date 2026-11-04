@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 
 #include "hover_thrust_estimator/common/event_types.h"
 #include "hover_thrust_estimator/common/types.h"
@@ -99,6 +100,30 @@ TEST(HoverThrustRuntimeBoundary, StaleHealthEdgePublishesSelfCheckSameTurn) {
 
     runtime.update(1.215);
     EXPECT_TRUE(runtime.transitionTrace().empty());
+}
+
+TEST(HoverThrustRuntimeBoundary, StaleBoundaryIsStrictAndWakeUsesTheExactEdge) {
+    HoverThrustEstimatorRuntime runtime;
+    ASSERT_TRUE(runtime.applyInput(readyInput(1.0, 0.8, 0.5), 1.0).ok());
+    runtime.update(1.0);
+
+    const auto still_ready = runtime.update(1.2);
+    EXPECT_EQ(still_ready.state, state_type::Airborne);
+    EXPECT_EQ(runtime.health().condition, HoverThrustHealthCondition::kEstimationReady);
+
+    const double strict_edge =
+        std::nextafter(1.0 + runtime.config().sample_timeout,
+                       std::numeric_limits<double>::infinity());
+    const auto wake = runtime.nextWake(1.2);
+    ASSERT_TRUE(wake.next_deadline_sec.has_value());
+    EXPECT_DOUBLE_EQ(*wake.next_deadline_sec, strict_edge);
+
+    const auto stale = runtime.update(strict_edge);
+    EXPECT_EQ(stale.state, state_type::SelfCheck);
+    EXPECT_EQ(runtime.health().condition, HoverThrustHealthCondition::kInputUnhealthy);
+    EXPECT_NE(stale.flags & HoverThrustRuntimeFlag::kImuStale, 0u);
+    EXPECT_NE(stale.flags & HoverThrustRuntimeFlag::kThrustStale, 0u);
+    EXPECT_NE(stale.flags & HoverThrustRuntimeFlag::kAltitudeStale, 0u);
 }
 
 TEST(HoverThrustRuntimeBoundary, StartupWakeAndApplyInputBatch) {
