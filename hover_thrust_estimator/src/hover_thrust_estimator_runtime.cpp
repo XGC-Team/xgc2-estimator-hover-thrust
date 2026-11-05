@@ -124,7 +124,7 @@ HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double n
     evaluateHealthAt(now_sec);
 
     auto tick_transition = machine_->dispatch(HoverThrustTick{now_sec}, *this);
-    machine_->apply(std::move(tick_transition), now_sec);
+    machine_->apply(tick_transition, now_sec);
 
     input_.batch_time_jump = false;
     ++owner_turn_;
@@ -202,7 +202,7 @@ void HoverThrustEstimatorRuntime::evaluateHealthAt(double now_sec) {
     }
 
     onEnterState(to_state);
-    machine_->apply(std::move(transition), now_sec);
+    machine_->apply(transition, now_sec);
     transition_trace_.push_back(TransitionTrace{++trace_sequence_, now_sec,
                                                 eventIdForCondition(health.condition), from_state,
                                                 to_state, transition_priority::AUTOMATIC});
@@ -217,7 +217,6 @@ void HoverThrustEstimatorRuntime::onEnterState(HoverThrustStateId state) {
             output_model_.freezeTarget();
             break;
         case state_type::Airborne:
-            break;
         default:
             break;
     }
