@@ -30,12 +30,10 @@ done
 # Those layers translate ROS topics/messages into the ROS-free runtime context.
 core_paths=(
   "${REPO_ROOT}/hover_thrust_estimator/include/hover_thrust_estimator/common"
-  "${REPO_ROOT}/hover_thrust_estimator/include/hover_thrust_estimator/state_machine"
   "${REPO_ROOT}/hover_thrust_estimator/include/hover_thrust_estimator/hover_thrust_estimator.h"
   "${REPO_ROOT}/hover_thrust_estimator/include/hover_thrust_estimator/hover_thrust_estimator_runtime.h"
   "${REPO_ROOT}/hover_thrust_estimator/include/hover_thrust_estimator/hover_thrust_output_model.h"
   "${REPO_ROOT}/hover_thrust_estimator/src/hover_thrust_estimator_runtime.cpp"
-  "${REPO_ROOT}/hover_thrust_estimator/src/state_machine"
 )
 
 ros_source_pattern='(#include[[:space:]]*[<"][^>"]*(ros/|ros\.h|roscpp|rospy|[[:alnum:]_]+_msgs/|diagnostic_msgs/|tf2/|tf/)[^>"]*[>"])|(^|[^[:alnum:]_])(ros::|[[:alnum:]_]+_msgs::|diagnostic_msgs::|tf2::)'

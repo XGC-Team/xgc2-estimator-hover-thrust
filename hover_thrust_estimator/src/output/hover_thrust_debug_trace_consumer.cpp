@@ -45,9 +45,10 @@ state_machine_msgs::StateMachineTraceEvent makeTraceEventMessage(const Transitio
 
 }  // namespace
 
-HoverThrustDebugTraceConsumer::HoverThrustDebugTraceConsumer(
-    ros::NodeHandle& nh, HoverThrustEstimatorRuntime& runtime, std::string debug_trace_topic,
-    uint32_t queue_size)
+HoverThrustDebugTraceConsumer::HoverThrustDebugTraceConsumer(ros::NodeHandle& nh,
+                                                             HoverThrustEstimatorRuntime& runtime,
+                                                             std::string debug_trace_topic,
+                                                             uint32_t queue_size)
     : runtime_(runtime) {
     debug_trace_pub_ =
         nh.advertise<state_machine_msgs::StateMachineTrace>(debug_trace_topic, queue_size, false);

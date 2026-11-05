@@ -24,17 +24,17 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
 
     runtime_.setConfig(estimator_config_);
 
-    output_consumer_ = std::make_unique<HoverThrustOutputConsumer>(
-        nh_, estimate_state_topic_, kRosQueueSize);
+    output_consumer_ =
+        std::make_unique<HoverThrustOutputConsumer>(nh_, estimate_state_topic_, kRosQueueSize);
     debug_trace_consumer_ = std::make_unique<HoverThrustDebugTraceConsumer>(
         nh_, runtime_, debug_trace_topic_, kRosQueueSize);
 
     input_producer_ = std::make_unique<HoverThrustInputProducer>(
         nh_, imu_topic_, target_attitude_topic_, altitude_topic_, kRosQueueSize, runtime_);
 
-    deadline_timer_ = nh_.createTimer(ros::Duration(1.0),
-                                      &HoverThrustEstimatorNode::onDeadlineTimer, this,
-                                      /*oneshot=*/true, /*autostart=*/false);
+    deadline_timer_ =
+        nh_.createTimer(ros::Duration(1.0), &HoverThrustEstimatorNode::onDeadlineTimer, this,
+                        /*oneshot=*/true, /*autostart=*/false);
 
     ROS_INFO(
         "[HoverThrustEstimatorNode] Initialized: imu=%s target_attitude=%s pose=%s estimate=%s "

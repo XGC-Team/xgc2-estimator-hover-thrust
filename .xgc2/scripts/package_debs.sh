@@ -55,7 +55,7 @@ printf 'Breaks: %s (<< %s), xgc2-hover-thrust-native (<< %s)\nReplaces: %s (<< %
 printf 'libhover_thrust_estimator_math 0 %s (= %s)\n' "$core" "$VERSION" > "$WORK/$core/DEBIAN/shlibs"
 copy_required "$PREFIX/lib/libhover_thrust_estimator_math.so" "$dev"
 copy_required "$PREFIX/lib/cmake/HoverThrustEstimator" "$dev"
-for component in common state_machine; do copy_required "$PREFIX/include/hover_thrust_estimator/$component" "$dev"; done
+copy_required "$PREFIX/include/hover_thrust_estimator/common" "$dev"
 for header in hover_thrust_estimator.h hover_thrust_estimator_runtime.h hover_thrust_output_model.h; do copy_required "$PREFIX/include/hover_thrust_estimator/$header" "$dev"; done
 control "$dev" "$core (= $VERSION), libxgc2-math-dev (>= 0.5.6-6~focal), libxgc2-state-machine-dev (>= 0.2.0~focal)" 'XGC2 hover-thrust domain C++ headers and CMake target' libdevel
 printf 'Breaks: %s (<< %s)\nReplaces: %s (<< %s)\n' "$ros" "$old_boundary" "$ros" "$old_boundary" >> "$WORK/$dev/DEBIAN/control"

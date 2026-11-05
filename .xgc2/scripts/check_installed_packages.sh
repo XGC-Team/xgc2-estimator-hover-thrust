@@ -30,7 +30,7 @@ dpkg -s ros-noetic-xgc2-state-machine-msgs >/dev/null
 test -f /usr/include/xgc2_math/estimation/recursive_least_squares.hpp
 test -f /usr/include/xgc2_math/filter/slew_rate_limiter.hpp
 test -f /usr/include/xgc2_math/utils/sample_timing.hpp
-test -f /usr/include/state_machine/state_machine.hpp
+test -f /usr/include/state_machine/adt_machine.hpp
 test -f "/opt/ros/${ROS_DISTRO}/include/state_machine_msgs/StateMachineTrace.h"
 test "$(rospack find hover_thrust_estimator)" = "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator"
 test "$(rospack find hover_thrust_estimator_msgs)" = "/opt/ros/${ROS_DISTRO}/share/hover_thrust_estimator_msgs"

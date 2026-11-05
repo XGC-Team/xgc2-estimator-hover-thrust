@@ -4,7 +4,6 @@
 #include <limits>
 #include <type_traits>
 #include <utility>
-
 #include <xgc2_math/utils/sample_timing.hpp>
 
 #include "hover_thrust_estimator/common/config_utils.h"
@@ -168,8 +167,8 @@ HoverThrustEstimatorRuntime::Wake HoverThrustEstimatorRuntime::nextWake(double n
         if (!sample->received || !std::isfinite(sample->stamp_sec)) {
             continue;
         }
-        const double boundary = std::nextafter(
-            sample->stamp_sec + config_.sample_timeout, std::numeric_limits<double>::infinity());
+        const double boundary = std::nextafter(sample->stamp_sec + config_.sample_timeout,
+                                               std::numeric_limits<double>::infinity());
         // Once the timeout is already in the past, health has been (or is about
         // to be) evaluated at now; keeping that past deadline would busy-loop
         // the node until the next sample. Only future timeout edges are wakes.
@@ -262,8 +261,8 @@ bool HoverThrustEstimatorRuntime::updateRawEstimateIfDue(PeriodicGate& gate, dou
     }
 
     const auto& input = input_;
-    const bool sample_used = estimator_.update(
-        input.imu_acc_z.value, input.normalized_thrust.value, input.normalized_thrust.stamp_sec);
+    const bool sample_used = estimator_.update(input.imu_acc_z.value, input.normalized_thrust.value,
+                                               input.normalized_thrust.stamp_sec);
     if (!sample_used) {
         flags |= HoverThrustRuntimeFlag::kEstimatorRejected;
         return false;

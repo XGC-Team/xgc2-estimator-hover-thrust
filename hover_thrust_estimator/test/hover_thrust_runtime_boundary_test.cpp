@@ -57,8 +57,7 @@ TEST(HoverThrustRuntimeBoundary, IngestUpdatePublishAndNextWake) {
     EXPECT_EQ(runtime.publishedEstimates().front().output.state, state_type::Airborne);
 
     ASSERT_EQ(runtime.transitionTrace().size(), 1u);
-    EXPECT_EQ(runtime.transitionTrace().front().event_id,
-              event_type::HEALTH_ESTIMATION_READY);
+    EXPECT_EQ(runtime.transitionTrace().front().event_id, event_type::HEALTH_ESTIMATION_READY);
     EXPECT_EQ(runtime.transitionTrace().front().from_state, state_type::SelfCheck);
     EXPECT_EQ(runtime.transitionTrace().front().to_state, state_type::Airborne);
 
@@ -85,8 +84,7 @@ TEST(HoverThrustRuntimeBoundary, StaleHealthEdgePublishesSelfCheckSameTurn) {
     ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
     EXPECT_EQ(runtime.publishedEstimates().front().output.state, state_type::SelfCheck);
     ASSERT_EQ(runtime.transitionTrace().size(), 1u);
-    EXPECT_EQ(runtime.transitionTrace().front().event_id,
-              event_type::HEALTH_INPUT_UNHEALTHY);
+    EXPECT_EQ(runtime.transitionTrace().front().event_id, event_type::HEALTH_INPUT_UNHEALTHY);
     EXPECT_EQ(runtime.transitionTrace().front().from_state, state_type::Airborne);
     EXPECT_EQ(runtime.transitionTrace().front().to_state, state_type::SelfCheck);
 
@@ -108,9 +106,8 @@ TEST(HoverThrustRuntimeBoundary, StaleBoundaryIsStrictAndWakeUsesTheExactEdge) {
     EXPECT_EQ(still_ready.state, state_type::Airborne);
     EXPECT_EQ(runtime.health().condition, HoverThrustHealthCondition::kEstimationReady);
 
-    const double strict_edge =
-        std::nextafter(1.0 + runtime.config().sample_timeout,
-                       std::numeric_limits<double>::infinity());
+    const double strict_edge = std::nextafter(1.0 + runtime.config().sample_timeout,
+                                              std::numeric_limits<double>::infinity());
     const auto wake = runtime.nextWake(1.2);
     ASSERT_TRUE(wake.next_deadline_sec.has_value());
     EXPECT_DOUBLE_EQ(*wake.next_deadline_sec, strict_edge);
