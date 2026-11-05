@@ -49,7 +49,7 @@ CONTROL
 # One actual shared domain runtime; the ROS facade does not embed or package a copy.
 copy_required "$PREFIX/lib/libhover_thrust_estimator_math.so.0" "$core"
 copy_required "$PREFIX/lib/libhover_thrust_estimator_math.so.1.2.0" "$core"
-control "$core" 'libxgc2-state-machine-dev (>= 0.2.0~focal), libc6, libstdc++6, libgcc-s1' 'XGC2 ROS-free hover-thrust shared runtime' libs
+control "$core" 'libc6, libstdc++6, libgcc-s1' 'XGC2 ROS-free hover-thrust shared runtime' libs
 # The retired native transport module (xgc2-hover-thrust-native) is not rebuilt against this core.
 printf 'Breaks: %s (<< %s), xgc2-hover-thrust-native (<< %s)\nReplaces: %s (<< %s)\n' "$ros" "$old_boundary" "$old_boundary" "$ros" "$old_boundary" >> "$WORK/$core/DEBIAN/control"
 printf 'libhover_thrust_estimator_math 0 %s (= %s)\n' "$core" "$VERSION" > "$WORK/$core/DEBIAN/shlibs"
