@@ -1,7 +1,5 @@
 @PACKAGE_INIT@
 include(CMakeFindDependencyMacro)
 find_dependency(xgc2_math CONFIG)
-find_dependency(xgc2_state_machine CONFIG)
+find_dependency(xgc2_state_machine 0.2.0 CONFIG)
 include("${CMAKE_CURRENT_LIST_DIR}/HoverThrustEstimatorTargets.cmake")
-set_property(TARGET HoverThrustEstimator::Runtime APPEND PROPERTY
-  INTERFACE_INCLUDE_DIRECTORIES "${XGC2_STATE_MACHINE_INCLUDE_DIRS}")

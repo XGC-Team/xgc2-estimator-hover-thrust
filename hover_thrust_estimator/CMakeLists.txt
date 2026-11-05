@@ -5,7 +5,7 @@ option(BUILD_ROS "Build the ROS1 transport facade" ON)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 find_package(xgc2_math REQUIRED CONFIG)
-find_package(xgc2_state_machine REQUIRED CONFIG)
+find_package(xgc2_state_machine 0.2.0 CONFIG REQUIRED)
 
 add_library(hover_thrust_estimator_math SHARED
   src/hover_thrust_estimator_runtime.cpp)
@@ -15,9 +15,9 @@ set_target_properties(hover_thrust_estimator_math PROPERTIES EXPORT_NAME Runtime
 target_compile_features(hover_thrust_estimator_math PUBLIC cxx_std_17)
 target_include_directories(hover_thrust_estimator_math PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${XGC2_STATE_MACHINE_INCLUDE_DIRS}>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-target_link_libraries(hover_thrust_estimator_math PUBLIC xgc2_math::math)
+target_link_libraries(hover_thrust_estimator_math PUBLIC
+  xgc2_math::math xgc2_state_machine::state_machine)
 
 if(BUILD_ROS)
   find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs geometry_msgs

@@ -49,7 +49,7 @@ CONTROL
 # One actual shared domain runtime; the ROS facade does not embed or package a copy.
 copy_required "$PREFIX/lib/libhover_thrust_estimator_math.so.0" "$core"
 copy_required "$PREFIX/lib/libhover_thrust_estimator_math.so.1.2.0" "$core"
-control "$core" 'libxgc2-state-machine-dev (>= 0.1.3-4~focal), libc6, libstdc++6, libgcc-s1' 'XGC2 ROS-free hover-thrust shared runtime' libs
+control "$core" 'libxgc2-state-machine-dev (>= 0.2.0~focal), libc6, libstdc++6, libgcc-s1' 'XGC2 ROS-free hover-thrust shared runtime' libs
 # The retired native transport module (xgc2-hover-thrust-native) is not rebuilt against this core.
 printf 'Breaks: %s (<< %s), xgc2-hover-thrust-native (<< %s)\nReplaces: %s (<< %s)\n' "$ros" "$old_boundary" "$old_boundary" "$ros" "$old_boundary" >> "$WORK/$core/DEBIAN/control"
 printf 'libhover_thrust_estimator_math 0 %s (= %s)\n' "$core" "$VERSION" > "$WORK/$core/DEBIAN/shlibs"
@@ -57,7 +57,7 @@ copy_required "$PREFIX/lib/libhover_thrust_estimator_math.so" "$dev"
 copy_required "$PREFIX/lib/cmake/HoverThrustEstimator" "$dev"
 for component in common state_machine; do copy_required "$PREFIX/include/hover_thrust_estimator/$component" "$dev"; done
 for header in hover_thrust_estimator.h hover_thrust_estimator_runtime.h hover_thrust_output_model.h; do copy_required "$PREFIX/include/hover_thrust_estimator/$header" "$dev"; done
-control "$dev" "$core (= $VERSION), libxgc2-math-dev (>= 0.5.6-6~focal), libxgc2-state-machine-dev (>= 0.1.3-4~focal)" 'XGC2 hover-thrust domain C++ headers and CMake target' libdevel
+control "$dev" "$core (= $VERSION), libxgc2-math-dev (>= 0.5.6-6~focal), libxgc2-state-machine-dev (>= 0.2.0~focal)" 'XGC2 hover-thrust domain C++ headers and CMake target' libdevel
 printf 'Breaks: %s (<< %s)\nReplaces: %s (<< %s)\n' "$ros" "$old_boundary" "$ros" "$old_boundary" >> "$WORK/$dev/DEBIAN/control"
 if "$WITH_ROS"; then
   copy_required "$PREFIX/share/hover_thrust_estimator" "$ros"
