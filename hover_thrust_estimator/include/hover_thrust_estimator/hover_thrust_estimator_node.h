@@ -3,7 +3,6 @@
 #include <ros/ros.h>
 
 #include <memory>
-#include <state_machine/runtime/async_task_executor.hpp>
 #include <string>
 #include <vector>
 
@@ -51,7 +50,6 @@ class HoverThrustEstimatorNode {
     ros::Timer deadline_timer_;
 
     HoverThrustEstimatorRuntime runtime_;
-    ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle> output_event_executor_;
     std::unique_ptr<HoverThrustOutputConsumer> output_consumer_;
     std::unique_ptr<HoverThrustDebugTraceConsumer> debug_trace_consumer_;
     std::unique_ptr<HoverThrustInputProducer> input_producer_;

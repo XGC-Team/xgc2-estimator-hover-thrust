@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <state_machine/state_machine.hpp>
 
 #include "hover_thrust_estimator/common/event_types.h"
 #include "hover_thrust_estimator/hover_thrust_estimator.h"
@@ -25,7 +24,8 @@ enum HoverThrustRuntimeFlag : uint32_t {
     kRawEstimateStale = 1u << 16,
 };
 
-using HoverThrustStateId = ::state_machine::StateId;
+// Product-local numeric wire identity. Values remain 10/11/12; no kernel type leaks.
+using HoverThrustStateId = uint32_t;
 
 enum class HoverThrustHealthCondition : uint8_t {
     kInputUnhealthy = 0,

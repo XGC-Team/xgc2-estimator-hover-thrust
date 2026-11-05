@@ -3,17 +3,15 @@
 #include <ros1_utils/time_utils.h>
 
 #include <cmath>
-#include <memory>
 #include <stdexcept>
 #include <string>
-#include <utility>
 
 #include "hover_thrust_estimator/common/event_types.h"
 
 namespace hover_thrust_estimator {
 namespace {
 
-uint8_t toMessageState(::state_machine::StateId state) {
+uint8_t toMessageState(HoverThrustStateId state) {
     switch (state) {
         case state_type::SelfCheck:
             return hover_thrust_estimator_msgs::HoverThrustEstimate::STATE_SELF_CHECK;
@@ -27,45 +25,18 @@ uint8_t toMessageState(::state_machine::StateId state) {
     }
 }
 
-std::unique_ptr<::state_machine::runtime::Task<ros::NodeHandle>> makePublishTask(
-    std::string name, ros::Publisher estimate_state_pub,
-    hover_thrust_estimator_msgs::HoverThrustEstimate estimate_state_msg) {
-    return std::make_unique<::state_machine::runtime::LambdaTask<ros::NodeHandle>>(
-        std::move(name),
-        [estimate_state_pub = std::move(estimate_state_pub),
-         estimate_state_msg = std::move(estimate_state_msg)](ros::NodeHandle&) mutable {
-            estimate_state_pub.publish(estimate_state_msg);
-        });
-}
-
 }  // namespace
 
-HoverThrustOutputConsumer::HoverThrustOutputConsumer(
-    ros::NodeHandle& nh, ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle>& executor,
-    HoverThrustEstimatorRuntime& runtime, std::string estimate_state_topic, uint32_t queue_size)
-    : executor_(executor), runtime_(runtime) {
+HoverThrustOutputConsumer::HoverThrustOutputConsumer(ros::NodeHandle& nh,
+                                                     std::string estimate_state_topic,
+                                                     uint32_t queue_size) {
     estimate_state_pub_ = nh.advertise<hover_thrust_estimator_msgs::HoverThrustEstimate>(
         estimate_state_topic, queue_size, true);
 }
 
-bool HoverThrustOutputConsumer::handle(const PublicationEvent& event) {
-    if (event.id != output_event_type::PUBLISH_ESTIMATE) {
-        return false;
-    }
-
-    for (const auto& publication : runtime_.publishedEstimates()) {
-        const bool same_publication =
-            event.sequence != 0 ? publication.event.sequence == event.sequence
-                                : publication.event.timestamp == event.timestamp;
-        if (!same_publication) {
-            continue;
-        }
-        const ros::Time stamp = ros1_utils::timeSecOrNow(publication.stamp_sec);
-        executor_.pushTask(makePublishTask("PublishHoverThrustEstimate", estimate_state_pub_,
-                                           makeEstimateStateMessage(publication.output, stamp)));
-        return true;
-    }
-    return false;
+void HoverThrustOutputConsumer::handle(const PublishedEstimate& publication) {
+    const ros::Time stamp = ros1_utils::timeSecOrNow(publication.stamp_sec);
+    estimate_state_pub_.publish(makeEstimateStateMessage(publication.output, stamp));
 }
 
 hover_thrust_estimator_msgs::HoverThrustEstimate

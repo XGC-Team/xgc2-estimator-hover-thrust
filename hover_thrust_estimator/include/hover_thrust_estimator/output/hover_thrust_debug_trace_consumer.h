@@ -3,7 +3,6 @@
 #include <ros/ros.h>
 #include <state_machine_msgs/StateMachineTrace.h>
 
-#include <state_machine/runtime/async_task_executor.hpp>
 #include <string>
 #include <vector>
 
@@ -13,9 +12,8 @@ namespace hover_thrust_estimator {
 
 class HoverThrustDebugTraceConsumer {
    public:
-    HoverThrustDebugTraceConsumer(
-        ros::NodeHandle& nh, ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle>& executor,
-        HoverThrustEstimatorRuntime& runtime, std::string debug_trace_topic, uint32_t queue_size);
+    HoverThrustDebugTraceConsumer(ros::NodeHandle& nh, HoverThrustEstimatorRuntime& runtime,
+                                  std::string debug_trace_topic, uint32_t queue_size);
 
     std::string name() const {
         return "HoverThrustDebugTraceConsumer";
@@ -26,7 +24,6 @@ class HoverThrustDebugTraceConsumer {
     state_machine_msgs::StateMachineTrace makeTraceMessage(
         const ros::Time& stamp, const std::vector<TransitionTrace>& traces) const;
 
-    ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle>& executor_;
     HoverThrustEstimatorRuntime& runtime_;
     ros::Publisher debug_trace_pub_;
 };

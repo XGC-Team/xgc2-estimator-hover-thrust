@@ -19,15 +19,15 @@ constexpr uint32_t kRosQueueSize = 10;
 }  // namespace
 
 HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
-    : nh_(nh), private_nh_("~"), output_event_executor_(nh_) {
+    : nh_(nh), private_nh_("~") {
     loadParams();
 
     runtime_.setConfig(estimator_config_);
 
     output_consumer_ = std::make_unique<HoverThrustOutputConsumer>(
-        nh_, output_event_executor_, runtime_, estimate_state_topic_, kRosQueueSize);
+        nh_, estimate_state_topic_, kRosQueueSize);
     debug_trace_consumer_ = std::make_unique<HoverThrustDebugTraceConsumer>(
-        nh_, output_event_executor_, runtime_, debug_trace_topic_, kRosQueueSize);
+        nh_, runtime_, debug_trace_topic_, kRosQueueSize);
 
     input_producer_ = std::make_unique<HoverThrustInputProducer>(
         nh_, imu_topic_, target_attitude_topic_, altitude_topic_, kRosQueueSize, runtime_);
@@ -35,8 +35,6 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
     deadline_timer_ = nh_.createTimer(ros::Duration(1.0),
                                       &HoverThrustEstimatorNode::onDeadlineTimer, this,
                                       /*oneshot=*/true, /*autostart=*/false);
-
-    output_event_executor_.start();
 
     ROS_INFO(
         "[HoverThrustEstimatorNode] Initialized: imu=%s target_attitude=%s pose=%s estimate=%s "
@@ -48,7 +46,6 @@ HoverThrustEstimatorNode::HoverThrustEstimatorNode(ros::NodeHandle& nh)
 
 HoverThrustEstimatorNode::~HoverThrustEstimatorNode() {
     deadline_timer_.stop();
-    output_event_executor_.stop();
 }
 
 void HoverThrustEstimatorNode::run(double frequency) {
@@ -122,11 +119,7 @@ void HoverThrustEstimatorNode::onDeadlineTimer(const ros::TimerEvent& event) {
 
 void HoverThrustEstimatorNode::publishRuntimeOutputs() {
     for (const auto& publication : runtime_.publishedEstimates()) {
-        if (!output_consumer_->handle(publication.event)) {
-            ROS_WARN_THROTTLE(1.0,
-                              "[HoverThrustEstimatorNode] Published estimate was not found by its "
-                              "consumer");
-        }
+        output_consumer_->handle(publication);
     }
 
     const auto& transitions = runtime_.transitionTrace();

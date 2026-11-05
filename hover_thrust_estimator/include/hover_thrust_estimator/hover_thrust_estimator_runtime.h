@@ -4,7 +4,6 @@
 #include <memory>
 #include <optional>
 #include <state_machine/adt_machine.hpp>
-#include <state_machine/state_machine.hpp>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -48,16 +47,7 @@ inline HoverThrustStateId stateId(const HoverThrustState& state) {
     return AirborneState::kStateId;
 }
 
-// Product-local publication identity. It replaces the old state_machine::Event
-// shell at the facade boundary without inventing a second publication authority.
-struct PublicationEvent {
-    uint32_t id{output_event_type::PUBLISH_ESTIMATE};
-    double timestamp{0.0};
-    uint64_t sequence{0};
-};
-
 struct PublishedEstimate {
-    PublicationEvent event;
     double stamp_sec{0.0};
     HoverThrustOutput output;
 };
@@ -109,13 +99,12 @@ class HoverThrustEstimatorRuntime {
     // exists in this ROS-free runtime. These methods only record input facts
     // and the owner-local event time; update(now) advances the domain once
     // after the caller's input batch.
-    ::state_machine::Status ingestImu(double acceleration_z, double stamp_sec, double now_sec);
-    ::state_machine::Status ingestThrust(double normalized_thrust, bool ignored, double stamp_sec,
-                                         double now_sec);
-    ::state_machine::Status ingestAltitude(double altitude, double stamp_sec, double now_sec);
+    void ingestImu(double acceleration_z, double stamp_sec, double now_sec);
+    void ingestThrust(double normalized_thrust, bool ignored, double stamp_sec, double now_sec);
+    void ingestAltitude(double altitude, double stamp_sec, double now_sec);
     // Test/owner batch helper: applies one complete Input and records one
     // event time. Production ROS and embedded callers use ingest* above.
-    ::state_machine::Status applyInput(const Input& input, double now_sec);
+    void applyInput(const Input& input, double now_sec);
 
     // One causal owner turn: pending input health edges, the health evaluation
     // at now, the resulting state's due raw/publication actions, and output
@@ -155,10 +144,6 @@ class HoverThrustEstimatorRuntime {
     friend struct HoverThrustSpec;
     using Machine = ::state_machine::adt::AdtMachine<HoverThrustSpec>;
 
-    struct PublicationRequest {
-        double stamp_sec{0.0};
-    };
-
     void ingestSample(Sample& sample, double value, double stamp_sec, double now_sec);
     void evaluateHealthAt(double now_sec);
     void onEnterState(HoverThrustStateId state);
@@ -188,10 +173,8 @@ class HoverThrustEstimatorRuntime {
     bool last_sample_used_{false};
     Output last_output_{};
     std::vector<double> pending_input_marks_;
-    std::vector<PublicationRequest> publication_requests_;
     std::vector<PublishedEstimate> published_estimates_;
     std::vector<TransitionTrace> transition_trace_;
-    uint64_t publication_sequence_{0};
     uint64_t trace_sequence_{0};
     uint64_t owner_turn_{0};
 };

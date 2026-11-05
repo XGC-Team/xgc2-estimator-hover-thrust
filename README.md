@@ -3,16 +3,18 @@
 ## Shared runtime and ROS facade
 
 The domain owns one shared `hover_thrust_estimator_math` runtime library.
-`ingestImu`, `ingestThrust` and `ingestAltitude` own sample periods, finite flags
-and owner-local input marks. Callers pass the source timestamp and explicit
-event clock, then `update(now)` once after an input batch or on an idle wake.
+`ingestImu`, `ingestThrust`, `ingestAltitude` and the test/owner `applyInput`
+are `void` direct fact updates; they own sample periods, finite flags and
+owner-local input marks. They do not return queue-admission status or log a
+failure path. Callers pass the source timestamp and explicit event clock, then
+`update(now)` once after an input batch or on an idle wake.
 One causal owner turn evaluates the pending input health marks, evaluates health
 at `now`, applies a condition-edge transition, runs the resulting state's due
 raw/publication actions, and drives the output filter. Only the state-local
-`PeriodicGate`s drive `publishedEstimates()`; the ROS output consumer serializes
-those immutable records. The ROS facade handles zero ROS header stamps at its
-edge. The runtime never replaces zero stamps with a hidden clock. Default initial
-thrust remains 0.3; the existing publish/raw gates, safety limits and estimator
+`PeriodicGate`s drive `publishedEstimates()`; the ROS output consumer publishes
+those immutable records directly on the owner thread. The ROS facade handles
+zero ROS header stamps at its edge. The runtime never replaces zero stamps with
+a hidden clock. Default initial thrust remains 0.3; the existing publish/raw gates, safety limits and estimator
 are unchanged.
 ROS callbacks preserve each input topic's arrival order. A source clock
 regression is never sorted into a healthy sequence. Shared ingestion retains a
@@ -39,9 +41,12 @@ cmake --build build-core -j1
 cmake --install build-core
 ```
 
-The private prefix must contain the math and state-machine development packages.
-Installed core consumers use `find_package(HoverThrustEstimator CONFIG REQUIRED)`
-and `HoverThrustEstimator::Runtime`.
+The private prefix must contain the math development package and the
+state-machine ADT headers. The hover runtime links no state-machine shared
+library; its exported config adds `XGC2_STATE_MACHINE_INCLUDE_DIRS` for
+`adt_machine.hpp`. Installed core consumers use
+`find_package(HoverThrustEstimator CONFIG REQUIRED)` and
+`HoverThrustEstimator::Runtime`.
 
 The package candidate separates the shared runtime (`libxgc2-hover-thrust-core0`),
 the headers/CMake target (`libxgc2-hover-thrust-dev`) and the ROS transport

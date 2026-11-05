@@ -49,7 +49,7 @@ HoverThrustEstimatorRuntime::Input readyInput(double sample_stamp_sec, double ho
 
 void applyBatch(HoverThrustEstimatorRuntime& runtime,
                 const HoverThrustEstimatorRuntime::Input& input, double event_time_sec) {
-    EXPECT_TRUE(runtime.applyInput(input, event_time_sec).ok());
+    runtime.applyInput(input, event_time_sec);
 }
 
 void applyBatch(HoverThrustEstimatorRuntime& runtime,
@@ -152,16 +152,12 @@ TEST(HoverThrustEstimatorRuntimeTest, PublishOutputIsDrivenByStateGate) {
 
     runtime.update(1.0);
     ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
-    EXPECT_EQ(runtime.publishedEstimates().front().event.id,
-              output_event_type::PUBLISH_ESTIMATE);
 
     runtime.update(1.005);
     EXPECT_TRUE(runtime.publishedEstimates().empty());
 
     runtime.update(1.011);
     ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
-    EXPECT_EQ(runtime.publishedEstimates().front().event.id,
-              output_event_type::PUBLISH_ESTIMATE);
 }
 
 TEST(HoverThrustEstimatorRuntimeTest, MissingImuPublishesSelfCheckOutputWithFlags) {
@@ -312,15 +308,11 @@ TEST(HoverThrustEstimatorRuntimeTest, TickStaleSelfCheckKeepsPublishingOutputEve
     const auto stale_output = runtime.update(1.21);
     EXPECT_EQ(stale_output.state, state_type::SelfCheck);
     ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
-    EXPECT_EQ(runtime.publishedEstimates().front().event.id,
-              output_event_type::PUBLISH_ESTIMATE);
     EXPECT_EQ(runtime.publishedEstimates().front().output.state, state_type::SelfCheck);
 
     runtime.update(1.221);
 
     ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
-    EXPECT_EQ(runtime.publishedEstimates().front().event.id,
-              output_event_type::PUBLISH_ESTIMATE);
     const auto filtered_output = advanceFilterForPublish(runtime, 1.221);
     EXPECT_EQ(filtered_output.state, state_type::SelfCheck);
     EXPECT_GT(filtered_output.hover_thrust, 0.3);
@@ -489,16 +481,16 @@ TEST(HoverThrustEstimatorRuntimeTest, RawUpdateIsLimitedToConfiguredRate) {
 
 TEST(HoverThrustEstimatorRuntimeTest, IngestOwnsSamplePeriodFiniteAndEventClock) {
     HoverThrustEstimatorRuntime runtime;
-    ASSERT_TRUE(runtime.ingestImu(9.8, 1.0, 1.0).ok());
-    ASSERT_TRUE(runtime.ingestThrust(0.3, false, 1.0, 1.0).ok());
-    ASSERT_TRUE(runtime.ingestAltitude(1.0, 1.0, 1.0).ok());
+    runtime.ingestImu(9.8, 1.0, 1.0);
+    runtime.ingestThrust(0.3, false, 1.0, 1.0);
+    runtime.ingestAltitude(1.0, 1.0, 1.0);
     runtime.update(1.0);
-    ASSERT_TRUE(runtime.ingestImu(std::numeric_limits<double>::quiet_NaN(), 1.01, 1.02).ok());
+    runtime.ingestImu(std::numeric_limits<double>::quiet_NaN(), 1.01, 1.02);
     EXPECT_NEAR(runtime.input().imu_acc_z.period_sec, 0.01, 1e-14);
     EXPECT_DOUBLE_EQ(runtime.input().imu_acc_z.stamp_sec, 1.01);
     EXPECT_TRUE(runtime.input().imu_acc_z.received);
     EXPECT_FALSE(runtime.input().imu_acc_z.finite);
-    ASSERT_TRUE(runtime.ingestThrust(0.3, true, 1.01, 1.02).ok());
+    runtime.ingestThrust(0.3, true, 1.01, 1.02);
     EXPECT_TRUE(runtime.input().thrust_ignored);
     runtime.update(1.02);
     EXPECT_EQ(runtime.currentState(), state_type::SelfCheck);
@@ -508,7 +500,7 @@ TEST(HoverThrustEstimatorRuntimeTest, IngestOwnsSamplePeriodFiniteAndEventClock)
 
 TEST(HoverThrustEstimatorRuntimeTest, ZeroStampHasNoHiddenClockFallback) {
     HoverThrustEstimatorRuntime runtime;
-    ASSERT_TRUE(runtime.ingestImu(9.8, 0.0, 2.0).ok());
+    runtime.ingestImu(9.8, 0.0, 2.0);
     EXPECT_DOUBLE_EQ(runtime.input().imu_acc_z.stamp_sec, 0.0);
     runtime.update(2.0);
     EXPECT_EQ(runtime.currentState(), state_type::SelfCheck);
@@ -532,13 +524,13 @@ TEST(HoverThrustEstimatorRuntimeTest, PublishedOutputDoesNotAdvanceBetweenStateG
 
 TEST(HoverThrustEstimatorRuntimeTest, SamePortBackwardBatchReportsOriginalTimeJumpFlag) {
     HoverThrustEstimatorRuntime runtime;
-    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.0, 10.0).ok());
-    ASSERT_TRUE(runtime.ingestThrust(.3, false, 10.0, 10.0).ok());
-    ASSERT_TRUE(runtime.ingestAltitude(1, 10.0, 10.0).ok());
+    runtime.ingestImu(9.8066, 10.0, 10.0);
+    runtime.ingestThrust(.3, false, 10.0, 10.0);
+    runtime.ingestAltitude(1, 10.0, 10.0);
     runtime.update(10.0);
     ASSERT_TRUE(runtime.health().ready);
-    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.2, 10.2).ok());
-    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.1, 10.2).ok());
+    runtime.ingestImu(9.8066, 10.2, 10.2);
+    runtime.ingestImu(9.8066, 10.1, 10.2);
     runtime.update(10.2);
     EXPECT_FALSE(runtime.health().ready);
     EXPECT_EQ(runtime.currentState(), state_type::SelfCheck);
@@ -548,14 +540,14 @@ TEST(HoverThrustEstimatorRuntimeTest, SamePortBackwardBatchReportsOriginalTimeJu
 
 TEST(HoverThrustEstimatorRuntimeTest, LaterFreshInputCannotEraseSameBatchBackwardFault) {
     HoverThrustEstimatorRuntime runtime;
-    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.0, 10.0).ok());
-    ASSERT_TRUE(runtime.ingestThrust(.3, false, 10.0, 10.0).ok());
-    ASSERT_TRUE(runtime.ingestAltitude(1, 10.0, 10.0).ok());
+    runtime.ingestImu(9.8066, 10.0, 10.0);
+    runtime.ingestThrust(.3, false, 10.0, 10.0);
+    runtime.ingestAltitude(1, 10.0, 10.0);
     runtime.update(10.0);
     ASSERT_TRUE(runtime.health().ready);
-    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.2, 10.3).ok());
-    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.1, 10.3).ok());
-    ASSERT_TRUE(runtime.ingestImu(9.8066, 10.3, 10.3).ok());
+    runtime.ingestImu(9.8066, 10.2, 10.3);
+    runtime.ingestImu(9.8066, 10.1, 10.3);
+    runtime.ingestImu(9.8066, 10.3, 10.3);
     EXPECT_GT(runtime.input().imu_acc_z.period_sec, 0);
     ASSERT_TRUE(runtime.input().batch_time_jump);
     runtime.update(10.3);

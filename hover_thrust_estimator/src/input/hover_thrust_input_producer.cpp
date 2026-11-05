@@ -7,15 +7,6 @@
 #include <utility>
 
 namespace hover_thrust_estimator {
-namespace {
-
-void logInputIngestFailure(const ::state_machine::Status& status,
-                           const std::string& failed_source) {
-    ROS_WARN_THROTTLE(1.0, "[HoverThrustInputProducer] Failed to ingest %s: %s",
-                      failed_source.c_str(), status.message.c_str());
-}
-
-}  // namespace
 
 HoverThrustInputProducer::HoverThrustInputProducer(ros::NodeHandle& nh, std::string imu_topic,
                                                    std::string target_attitude_topic,
@@ -35,9 +26,7 @@ void HoverThrustInputProducer::imuCallback(const sensor_msgs::Imu::ConstPtr& msg
         return;
     }
     const double stamp_sec = ros1_utils::messageStampOrNow(msg->header.stamp).toSec();
-    const auto status = runtime_.ingestImu(msg->linear_acceleration.z, stamp_sec, stamp_sec);
-    if (!status.ok())
-        logInputIngestFailure(status, "imu");
+    runtime_.ingestImu(msg->linear_acceleration.z, stamp_sec, stamp_sec);
 }
 
 void HoverThrustInputProducer::targetAttitudeCallback(
@@ -48,9 +37,7 @@ void HoverThrustInputProducer::targetAttitudeCallback(
 
     const bool ignored = (msg->type_mask & mavros_msgs::AttitudeTarget::IGNORE_THRUST) != 0;
     const double stamp_sec = ros1_utils::messageStampOrNow(msg->header.stamp).toSec();
-    const auto status = runtime_.ingestThrust(msg->thrust, ignored, stamp_sec, stamp_sec);
-    if (!status.ok())
-        logInputIngestFailure(status, "target_attitude");
+    runtime_.ingestThrust(msg->thrust, ignored, stamp_sec, stamp_sec);
 }
 
 void HoverThrustInputProducer::poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
@@ -58,9 +45,7 @@ void HoverThrustInputProducer::poseCallback(const geometry_msgs::PoseStamped::Co
         return;
     }
     const double stamp_sec = ros1_utils::messageStampOrNow(msg->header.stamp).toSec();
-    const auto status = runtime_.ingestAltitude(msg->pose.position.z, stamp_sec, stamp_sec);
-    if (!status.ok())
-        logInputIngestFailure(status, "altitude");
+    runtime_.ingestAltitude(msg->pose.position.z, stamp_sec, stamp_sec);
 }
 
 }  // namespace hover_thrust_estimator

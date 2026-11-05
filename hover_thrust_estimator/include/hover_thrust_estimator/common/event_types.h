@@ -20,10 +20,6 @@ constexpr uint32_t HEALTH_BELOW_MIN_ALTITUDE = 201;
 constexpr uint32_t HEALTH_ESTIMATION_READY = 202;
 }  // namespace event_type
 
-namespace output_event_type {
-constexpr uint32_t PUBLISH_ESTIMATE = 1000;
-}  // namespace output_event_type
-
 namespace transition_priority {
 constexpr int AUTOMATIC = 10;
 }  // namespace transition_priority

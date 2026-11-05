@@ -35,9 +35,9 @@ TEST(HoverThrustRuntimeBoundary, IngestUpdatePublishAndNextWake) {
     HoverThrustEstimatorRuntime runtime;
     const auto input = readyInput(1.0, 0.8, 0.5);
 
-    ASSERT_TRUE(runtime.ingestImu(input.imu_acc_z.value, 1.0, 1.0).ok());
-    ASSERT_TRUE(runtime.ingestThrust(input.normalized_thrust.value, false, 1.0, 1.0).ok());
-    ASSERT_TRUE(runtime.ingestAltitude(input.altitude.value, 1.0, 1.0).ok());
+    runtime.ingestImu(input.imu_acc_z.value, 1.0, 1.0);
+    runtime.ingestThrust(input.normalized_thrust.value, false, 1.0, 1.0);
+    runtime.ingestAltitude(input.altitude.value, 1.0, 1.0);
     EXPECT_TRUE(runtime.hasPendingInput());
 
     auto wake = runtime.nextWake(1.0);
@@ -53,9 +53,6 @@ TEST(HoverThrustRuntimeBoundary, IngestUpdatePublishAndNextWake) {
     EXPECT_EQ(runtime.updateIndex(), 1u);
 
     ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
-    EXPECT_EQ(runtime.publishedEstimates().front().event.id,
-              output_event_type::PUBLISH_ESTIMATE);
-    EXPECT_EQ(runtime.publishedEstimates().front().event.sequence, 1u);
     EXPECT_DOUBLE_EQ(runtime.publishedEstimates().front().stamp_sec, 1.0);
     EXPECT_EQ(runtime.publishedEstimates().front().output.state, state_type::Airborne);
 
@@ -73,7 +70,7 @@ TEST(HoverThrustRuntimeBoundary, IngestUpdatePublishAndNextWake) {
 TEST(HoverThrustRuntimeBoundary, StaleHealthEdgePublishesSelfCheckSameTurn) {
     HoverThrustEstimatorRuntime runtime;
     const auto input = readyInput(1.0, 0.8, 0.5);
-    ASSERT_TRUE(runtime.applyInput(input, 1.0).ok());
+    runtime.applyInput(input, 1.0);
     const auto ready = runtime.update(1.0);
     ASSERT_EQ(ready.state, state_type::Airborne);
     ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
@@ -104,7 +101,7 @@ TEST(HoverThrustRuntimeBoundary, StaleHealthEdgePublishesSelfCheckSameTurn) {
 
 TEST(HoverThrustRuntimeBoundary, StaleBoundaryIsStrictAndWakeUsesTheExactEdge) {
     HoverThrustEstimatorRuntime runtime;
-    ASSERT_TRUE(runtime.applyInput(readyInput(1.0, 0.8, 0.5), 1.0).ok());
+    runtime.applyInput(readyInput(1.0, 0.8, 0.5), 1.0);
     runtime.update(1.0);
 
     const auto still_ready = runtime.update(1.2);
@@ -133,7 +130,7 @@ TEST(HoverThrustRuntimeBoundary, StartupWakeAndApplyInputBatch) {
     EXPECT_DOUBLE_EQ(*wake.next_deadline_sec, 0.0);
 
     const auto input = readyInput(0.001, 0.8, 0.5);
-    ASSERT_TRUE(runtime.applyInput(input, 0.001).ok());
+    runtime.applyInput(input, 0.001);
     EXPECT_TRUE(runtime.hasPendingInput());
     const auto output = runtime.update(0.001);
     EXPECT_EQ(output.state, state_type::Airborne);
@@ -145,16 +142,14 @@ TEST(HoverThrustRuntimeBoundary, StartupWakeAndApplyInputBatch) {
     EXPECT_NEAR(*wake.next_deadline_sec, 0.011, 1.0e-12);
 }
 
-TEST(HoverThrustRuntimeBoundary, PublicationSequenceIsMonotonicAcrossTurns) {
+TEST(HoverThrustRuntimeBoundary, PublicationStampTracksTheDueTurn) {
     HoverThrustEstimatorRuntime runtime;
-    ASSERT_TRUE(runtime.applyInput(readyInput(1.0, 0.8, 0.5), 1.0).ok());
+    runtime.applyInput(readyInput(1.0, 0.8, 0.5), 1.0);
     runtime.update(1.0);
     ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
-    const uint64_t first_sequence = runtime.publishedEstimates().front().event.sequence;
 
     runtime.update(1.011);
     ASSERT_EQ(runtime.publishedEstimates().size(), 1u);
-    EXPECT_EQ(runtime.publishedEstimates().front().event.sequence, first_sequence + 1);
     EXPECT_DOUBLE_EQ(runtime.publishedEstimates().front().stamp_sec, 1.011);
 }
 

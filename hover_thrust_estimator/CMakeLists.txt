@@ -15,9 +15,9 @@ set_target_properties(hover_thrust_estimator_math PROPERTIES EXPORT_NAME Runtime
 target_compile_features(hover_thrust_estimator_math PUBLIC cxx_std_17)
 target_include_directories(hover_thrust_estimator_math PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${XGC2_STATE_MACHINE_INCLUDE_DIRS}>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-target_link_libraries(hover_thrust_estimator_math PUBLIC
-  xgc2_math::math xgc2_state_machine::state_machine)
+target_link_libraries(hover_thrust_estimator_math PUBLIC xgc2_math::math)
 
 if(BUILD_ROS)
   find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs geometry_msgs

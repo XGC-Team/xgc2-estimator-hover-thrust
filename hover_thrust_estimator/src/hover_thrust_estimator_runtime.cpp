@@ -65,10 +65,8 @@ void HoverThrustEstimatorRuntime::reset() {
     flags_ = 0;
     machine_ = std::make_unique<Machine>(SelfCheckState{}, 0.0);
     pending_input_marks_.clear();
-    publication_requests_.clear();
     published_estimates_.clear();
     transition_trace_.clear();
-    publication_sequence_ = 0;
     trace_sequence_ = 0;
     owner_turn_ = 0;
     last_output_ = makeOutput(currentState(), flags_, false, health_);
@@ -89,38 +87,30 @@ void HoverThrustEstimatorRuntime::ingestSample(Sample& sample, double value, dou
     pending_input_marks_.push_back(now_sec);
 }
 
-::state_machine::Status HoverThrustEstimatorRuntime::ingestImu(double acceleration_z,
-                                                               double stamp_sec, double now_sec) {
+void HoverThrustEstimatorRuntime::ingestImu(double acceleration_z, double stamp_sec,
+                                            double now_sec) {
     ingestSample(input_.imu_acc_z, acceleration_z, stamp_sec, now_sec);
-    return {};
 }
 
-::state_machine::Status HoverThrustEstimatorRuntime::ingestThrust(double normalized_thrust,
-                                                                  bool ignored, double stamp_sec,
-                                                                  double now_sec) {
+void HoverThrustEstimatorRuntime::ingestThrust(double normalized_thrust, bool ignored,
+                                               double stamp_sec, double now_sec) {
     input_.thrust_ignored = ignored;
     ingestSample(input_.normalized_thrust, normalized_thrust, stamp_sec, now_sec);
-    return {};
 }
 
-::state_machine::Status HoverThrustEstimatorRuntime::ingestAltitude(double altitude,
-                                                                    double stamp_sec,
-                                                                    double now_sec) {
+void HoverThrustEstimatorRuntime::ingestAltitude(double altitude, double stamp_sec,
+                                                 double now_sec) {
     ingestSample(input_.altitude, altitude, stamp_sec, now_sec);
-    return {};
 }
 
-::state_machine::Status HoverThrustEstimatorRuntime::applyInput(const Input& input,
-                                                                double now_sec) {
+void HoverThrustEstimatorRuntime::applyInput(const Input& input, double now_sec) {
     input_ = input;
     pending_input_marks_.push_back(now_sec);
-    return {};
 }
 
 HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double now_sec) {
     published_estimates_.clear();
     transition_trace_.clear();
-    publication_requests_.clear();
 
     // Pending input events are evaluated in arrival order at their own event
     // clock, exactly as the old health monitor did for posted input events.
@@ -136,15 +126,6 @@ HoverThrustEstimatorRuntime::Output HoverThrustEstimatorRuntime::update(double n
 
     auto tick_transition = machine_->dispatch(HoverThrustTick{now_sec}, *this);
     machine_->apply(std::move(tick_transition), now_sec);
-
-    for (const auto& request : publication_requests_) {
-        const double stamp = std::isfinite(request.stamp_sec) ? request.stamp_sec : now_sec;
-        output_model_.driveTowardTarget(stamp);
-        last_output_ = makeOutput(currentState(), flags_, last_sample_used_, health_);
-        published_estimates_.push_back(PublishedEstimate{
-            PublicationEvent{output_event_type::PUBLISH_ESTIMATE, stamp, ++publication_sequence_},
-            stamp, last_output_});
-    }
 
     input_.batch_time_jump = false;
     ++owner_turn_;
@@ -298,7 +279,9 @@ void HoverThrustEstimatorRuntime::publishEstimateIfDue(PeriodicGate& gate, doubl
     if (!gate.due(now_sec, publishPeriodSec())) {
         return;
     }
-    publication_requests_.push_back(PublicationRequest{now_sec});
+    output_model_.driveTowardTarget(now_sec);
+    last_output_ = makeOutput(currentState(), flags_, last_sample_used_, health_);
+    published_estimates_.push_back(PublishedEstimate{now_sec, last_output_});
 }
 
 void HoverThrustEstimatorRuntime::recordStateOutput(HoverThrustStateId state, uint32_t flags,

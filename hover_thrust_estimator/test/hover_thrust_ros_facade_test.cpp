@@ -89,9 +89,7 @@ TEST(HoverThrustRosFacade, PublishedEstimatesCarryTheRuntimeOutput) {
         "estimate", 100, [&](const hover_thrust_estimator_msgs::HoverThrustEstimate::ConstPtr& m) {
             ros_outputs.push_back(*m);
         });
-    state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle> executor(nh);
-    hte::HoverThrustOutputConsumer output(nh, executor, runtime, "estimate", 100);
-    executor.start();
+    hte::HoverThrustOutputConsumer output(nh, "estimate", 100);
     ASSERT_TRUE(spin_until([&] {
         return imu_pub.getNumSubscribers() && target_pub.getNumSubscribers() &&
                pose_pub.getNumSubscribers() && sub.getNumPublishers();
@@ -114,7 +112,7 @@ TEST(HoverThrustRosFacade, PublishedEstimatesCarryTheRuntimeOutput) {
         runtime.update(now);
         for (const auto& p : runtime.publishedEstimates()) {
             const size_t previous = ros_outputs.size();
-            ASSERT_TRUE(output.handle(p.event));
+            output.handle(p);
             ASSERT_TRUE(spin_until([&] { return ros_outputs.size() == previous + 1; }));
             const auto& r = ros_outputs.back();
             EXPECT_EQ(r.header.stamp.toNSec(), uint64_t(now_ns));
@@ -159,7 +157,6 @@ TEST(HoverThrustRosFacade, PublishedEstimatesCarryTheRuntimeOutput) {
     EXPECT_EQ(runtime.currentState(), hte::state_type::SelfCheck);
     EXPECT_NE(runtime.health().flags & hte::HoverThrustRuntimeFlag::kImuStale, 0u);
     EXPECT_GT(compared, 150u);
-    executor.stop();
     std::cout << "ROS publications=" << compared
               << "; state, flags, hover thrust and stamp equal the runtime's output; zero ROS "
                  "stamp handled at the edge only; stale tick detected\n";

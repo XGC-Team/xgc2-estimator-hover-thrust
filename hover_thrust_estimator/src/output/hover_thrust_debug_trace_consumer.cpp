@@ -3,9 +3,7 @@
 #include <ros1_utils/time_utils.h>
 #include <state_machine_msgs/StateMachineTraceEvent.h>
 
-#include <memory>
 #include <string>
-#include <utility>
 
 #include "hover_thrust_estimator/common/event_types.h"
 
@@ -45,22 +43,12 @@ state_machine_msgs::StateMachineTraceEvent makeTraceEventMessage(const Transitio
     return msg;
 }
 
-std::unique_ptr<::state_machine::runtime::Task<ros::NodeHandle>> makePublishTask(
-    std::string name, ros::Publisher debug_trace_pub,
-    state_machine_msgs::StateMachineTrace debug_trace_msg) {
-    return std::make_unique<::state_machine::runtime::LambdaTask<ros::NodeHandle>>(
-        std::move(name), [debug_trace_pub = std::move(debug_trace_pub),
-                          debug_trace_msg = std::move(debug_trace_msg)](ros::NodeHandle&) mutable {
-            debug_trace_pub.publish(debug_trace_msg);
-        });
-}
-
 }  // namespace
 
 HoverThrustDebugTraceConsumer::HoverThrustDebugTraceConsumer(
-    ros::NodeHandle& nh, ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle>& executor,
-    HoverThrustEstimatorRuntime& runtime, std::string debug_trace_topic, uint32_t queue_size)
-    : executor_(executor), runtime_(runtime) {
+    ros::NodeHandle& nh, HoverThrustEstimatorRuntime& runtime, std::string debug_trace_topic,
+    uint32_t queue_size)
+    : runtime_(runtime) {
     debug_trace_pub_ =
         nh.advertise<state_machine_msgs::StateMachineTrace>(debug_trace_topic, queue_size, false);
 }
@@ -70,8 +58,7 @@ bool HoverThrustDebugTraceConsumer::handle(const std::vector<TransitionTrace>& t
         return false;
     }
     const ros::Time stamp = ros1_utils::timeSecOrNow(traces.back().stamp_sec);
-    executor_.pushTask(makePublishTask("PublishHoverThrustStateMachineTrace", debug_trace_pub_,
-                                       makeTraceMessage(stamp, traces)));
+    debug_trace_pub_.publish(makeTraceMessage(stamp, traces));
     return true;
 }
 

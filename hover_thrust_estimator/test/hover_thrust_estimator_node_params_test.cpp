@@ -77,13 +77,11 @@ TEST(HoverThrustDebugTraceConsumerTest, PublishesTraceThroughAsyncExecutor) {
     (void)sub;
 
     HoverThrustEstimatorRuntime runtime;
-    ASSERT_TRUE(runtime.applyInput(readyInput(1.0, 0.8, 0.5), 1.0).ok());
+    runtime.applyInput(readyInput(1.0, 0.8, 0.5), 1.0);
     runtime.update(1.0);
     ASSERT_FALSE(runtime.transitionTrace().empty());
 
-    ::state_machine::runtime::AsyncTaskExecutor<ros::NodeHandle> executor(nh);
-    HoverThrustDebugTraceConsumer consumer(nh, executor, runtime, topic, 1);
-    executor.start();
+    HoverThrustDebugTraceConsumer consumer(nh, runtime, topic, 1);
     ros::Duration(0.2).sleep();
 
     ASSERT_EQ(runtime.transitionTrace().size(), 1u);
@@ -94,7 +92,6 @@ TEST(HoverThrustDebugTraceConsumerTest, PublishesTraceThroughAsyncExecutor) {
         ros::spinOnce();
         ros::Duration(0.01).sleep();
     }
-    executor.stop();
 
     ASSERT_TRUE(received);
     EXPECT_EQ(received_msg.machine_name, "HoverThrustEstimator");
